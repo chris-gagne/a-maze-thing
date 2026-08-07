@@ -59,6 +59,7 @@ export class PlayScene extends Phaser.Scene {
   private carriedScore = 0
   private runSeed = 0
   private lives = 1
+  private stageEntryLives = 1
   private accumulator = 0
   private stageResolved = false
   private runEndActive = false
@@ -82,6 +83,7 @@ export class PlayScene extends Phaser.Scene {
   private movementKeys!: MovementKeys
   private introductionEnterKey!: Phaser.Input.Keyboard.Key
   private introductionSpaceKey!: Phaser.Input.Keyboard.Key
+  private retryLevelKey!: Phaser.Input.Keyboard.Key
   private retrySeedKey!: Phaser.Input.Keyboard.Key
   private coinSprites = new Map<number, Phaser.GameObjects.Image>()
   private spikeSprites = new Map<number, Phaser.GameObjects.Image>()
@@ -99,6 +101,7 @@ export class PlayScene extends Phaser.Scene {
     this.carriedScore = data.carriedScore ?? 0
     this.runSeed = data.runSeed ?? createRunSeed()
     this.lives = data.lives ?? INITIAL_LIVES
+    this.stageEntryLives = this.lives
     this.introducedFeatureIds = new Set(data.introducedFeatureIds ?? [])
     this.accumulator = 0
     this.stageResolved = false
@@ -192,6 +195,8 @@ export class PlayScene extends Phaser.Scene {
         this.startNewRun()
       } else if (Phaser.Input.Keyboard.JustDown(this.retrySeedKey)) {
         this.retryCurrentSeed()
+      } else if (Phaser.Input.Keyboard.JustDown(this.retryLevelKey)) {
+        this.retryCurrentLevel()
       }
       return
     }
@@ -500,6 +505,7 @@ export class PlayScene extends Phaser.Scene {
     }) as MovementKeys
     this.introductionEnterKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER)
     this.introductionSpaceKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)
+    this.retryLevelKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.T)
     this.retrySeedKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R)
     window.addEventListener('keydown', this.handleWindowKeyDown)
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
@@ -545,11 +551,11 @@ export class PlayScene extends Phaser.Scene {
 
     const scrim = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x05080a, 0.76)
       .setOrigin(0)
-    const panel = this.add.rectangle(0, 0, 600, 430, 0x05080a, 0.98)
+    const panel = this.add.rectangle(0, 0, 600, 520, 0x05080a, 0.98)
     panel.setStrokeStyle(4, 0x42e8df, 1)
     const eyebrow = this.add.text(
       0,
-      -164,
+      -204,
       `STAGE ${String(this.stageNumber).padStart(2, '0')}  //  SEED ${this.runSeed.toString(16).toUpperCase().padStart(8, '0')}`,
       {
         fontFamily: '"Press Start 2P"',
@@ -557,7 +563,7 @@ export class PlayScene extends Phaser.Scene {
         color: '#8ba5aa',
       },
     ).setOrigin(0.5)
-    const headline = this.add.text(0, -112, 'PAUSED', {
+    const headline = this.add.text(0, -152, 'PAUSED', {
       fontFamily: '"Press Start 2P"',
       fontSize: '30px',
       color: '#ffcf52',
@@ -570,13 +576,16 @@ export class PlayScene extends Phaser.Scene {
       headline,
     ]).setDepth(40)
 
-    this.createPauseActionButton(0, -36, 'RETURN TO PLAY [ESC]', 0x79f25f, () => {
+    this.createPauseActionButton(0, -68, 'RETURN TO GAME [ESC]', 0x79f25f, () => {
       this.resumeFromPause()
     })
-    this.createPauseActionButton(0, 44, 'RESTART SEED [R]', 0x42e8df, () => {
+    this.createPauseActionButton(0, 8, 'RETRY LEVEL [T]', 0xffcf52, () => {
+      this.retryCurrentLevel()
+    })
+    this.createPauseActionButton(0, 84, 'RETRY SEED [R]', 0x42e8df, () => {
       this.retryCurrentSeed()
     })
-    this.createPauseActionButton(0, 124, 'NEW RUN [ENTER]', 0xff5364, () => {
+    this.createPauseActionButton(0, 160, 'NEW RUN [ENTER]', 0xff5364, () => {
       this.startNewRun()
     })
   }
@@ -1028,6 +1037,21 @@ export class PlayScene extends Phaser.Scene {
     this.runRestarting = true
     updateRunSeedInUrl(this.runSeed)
     this.restartRun(this.runSeed)
+  }
+
+  private retryCurrentLevel(): void {
+    if (this.runRestarting) {
+      return
+    }
+
+    this.runRestarting = true
+    this.scene.restart({
+      stageNumber: this.stageNumber,
+      carriedScore: this.carriedScore,
+      runSeed: this.runSeed,
+      lives: this.stageEntryLives,
+      introducedFeatureIds: [...this.introducedFeatureIds],
+    })
   }
 
   private restartRun(runSeed: number): void {

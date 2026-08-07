@@ -14,7 +14,8 @@ Create a production build with `npm run build` and run the deterministic test su
 ## Controls
 
 - Arrow keys or `WASD`: queue a direction at the next legal junction
-- `Escape`: pause or return to play during active gameplay
+- `Escape`: pause or return to the game during active gameplay
+- While paused, `T`: retry the current level from its starting state
 - While paused, `R`: retry the same seed from Stage 1
 - While paused, `Enter`: start a new run with a fresh seed
 - `Enter`, `Space`, click, or tap: dismiss a stage briefing
@@ -23,7 +24,7 @@ Create a production build with `npm run build` and run the deterministic test su
 
 Movement continues until blocked. The hunter remains dormant until the player starts moving, then follows from the entrance after a short delay.
 
-Escape opens a pause menu during active gameplay. While paused, simulation time, movement, hazards, and gameplay animations freeze. `RETURN TO PLAY` preserves the exact stage state; `RESTART SEED` starts a clean Stage 1 run with the same seed; `NEW RUN` starts Stage 1 with a fresh seed and updates the URL. Both restart actions reset score, lives, stage progress, and feature discoveries. Pause is unavailable during briefings, life-loss interruptions, stage transitions, and game over.
+Escape opens a pause menu during active gameplay. While paused, simulation time, movement, hazards, and gameplay animations freeze. `RETURN TO GAME` preserves the exact stage state. `RETRY LEVEL` rebuilds the current level with the same layout, score carried from earlier levels, and lives held when the level began; progress and life changes from the discarded attempt are reset, and dismissed feature briefings do not repeat. `RETRY SEED` starts a clean Stage 1 run with the same seed, while `NEW RUN` starts Stage 1 with a fresh seed and updates the URL. Both run-level actions reset score, lives, stage progress, and feature discoveries. Pause is unavailable during briefings, life-loss interruptions, stage transitions, and game over.
 
 Coins are optional, but collecting every coin before reaching the exit earns the `COIN MONGER!` bonus and doubles that stage's coin award. The multiplier applies only when the stage is completed, never doubles score carried from earlier stages, and remains available after losing a reserve life because collected coins stay collected. A game over before the exit receives no bonus. Score saving remains deferred.
 
