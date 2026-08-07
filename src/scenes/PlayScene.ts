@@ -11,6 +11,7 @@ import {
 } from '../game/stageSimulation'
 import { parseRunSeed } from '../game/runSeed'
 import { INITIAL_LIVES } from '../game/lifeRules'
+import { calculateStageCoinAward } from '../game/stageScoring'
 import { getSpikePhase, SpikePhase } from '../game/spikeTiming'
 import {
   selectStageIntroduction,
@@ -745,23 +746,50 @@ export class PlayScene extends Phaser.Scene {
 
   private resolveStage(): void {
     this.stageResolved = true
-    const totalScore = this.carriedScore + this.simulation.collectedCoins
-    const panel = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 520, 188, 0x05080a, 0.96)
+    const award = calculateStageCoinAward(
+      this.simulation.collectedCoins,
+      this.simulation.coins.size,
+      this.simulation.complete,
+    )
+    const totalScore = this.carriedScore + award.awardedCoins
+    const panelHeight = award.coinMonger ? 230 : 188
+    const panelWidth = award.coinMonger ? 620 : 520
+    const panel = this.add.rectangle(
+      GAME_WIDTH / 2,
+      GAME_HEIGHT / 2,
+      panelWidth,
+      panelHeight,
+      0x05080a,
+      0.96,
+    )
     panel.setStrokeStyle(4, 0x79f25f, 1)
     panel.setDepth(20)
 
-    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 52, 'STAGE CLEAR', {
+    const headlineY = GAME_HEIGHT / 2 - (award.coinMonger ? 78 : 52)
+    this.add.text(GAME_WIDTH / 2, headlineY, 'STAGE CLEAR', {
       fontFamily: '"Press Start 2P"',
       fontSize: '28px',
       color: '#79f25f',
     }).setOrigin(0.5).setDepth(21)
+
+    if (award.coinMonger) {
+      this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 18, 'COIN MONGER!  2X', {
+        fontFamily: '"Press Start 2P"',
+        fontSize: '20px',
+        color: '#ffcf52',
+      }).setOrigin(0.5).setDepth(21)
+    }
+
+    const scoreLine = award.coinMonger
+      ? `${award.baseCoins} COINS + ${award.bonusCoins} BONUS  //  TOTAL ${totalScore}`
+      : `+${award.baseCoins} COINS  //  TOTAL ${totalScore}`
     this.add.text(
       GAME_WIDTH / 2,
-      GAME_HEIGHT / 2 + 16,
-      `+${this.simulation.collectedCoins} COINS  //  TOTAL ${totalScore}`,
+      GAME_HEIGHT / 2 + (award.coinMonger ? 50 : 16),
+      scoreLine,
       {
         fontFamily: '"Press Start 2P"',
-        fontSize: '14px',
+        fontSize: award.coinMonger ? '12px' : '14px',
         color: '#ffcf52',
       },
     ).setOrigin(0.5).setDepth(21)

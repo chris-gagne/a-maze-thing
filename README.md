@@ -20,6 +20,8 @@ Create a production build with `npm run build` and run the deterministic test su
 
 Movement continues until blocked. The hunter remains dormant until the player starts moving, then follows from the entrance after a short delay.
 
+Coins are optional, but collecting every coin before reaching the exit earns the `COIN MONGER!` bonus and doubles that stage's coin award. The multiplier applies only when the stage is completed, never doubles score carried from earlier stages, and remains available after losing a reserve life because collected coins stay collected. A game over before the exit receives no bonus. Score saving remains deferred.
+
 A fresh run opens with a short maze briefing. Later stages pause for one combined introduction only when their generated layout contains something not yet seen in that run, such as spikes or the evasive Extra Life. The maze simulation and hazard timers remain frozen until the briefing is dismissed; game over resets these discoveries for the next run.
 
 Floor spikes damage the player only while active. They never damage hostile enemies, but active spikes block new hunter routes; inactive, warning, and recovery phases remain traversable. Future ambusher and wanderer enemies will use the same blocker-aware navigation.
