@@ -14,11 +14,16 @@ Create a production build with `npm run build` and run the deterministic test su
 ## Controls
 
 - Arrow keys or `WASD`: queue a direction at the next legal junction
+- `Escape`: pause or return to play during active gameplay
+- While paused, `R`: retry the same seed from Stage 1
+- While paused, `Enter`: start a new run with a fresh seed
 - `Enter`, `Space`, click, or tap: dismiss a stage briefing
 - On game over, `Enter`: start a new run with a fresh seed
 - On game over, `R`: retry the same seed from Stage 1
 
 Movement continues until blocked. The hunter remains dormant until the player starts moving, then follows from the entrance after a short delay.
+
+Escape opens a pause menu during active gameplay. While paused, simulation time, movement, hazards, and gameplay animations freeze. `RETURN TO PLAY` preserves the exact stage state; `RESTART SEED` starts a clean Stage 1 run with the same seed; `NEW RUN` starts Stage 1 with a fresh seed and updates the URL. Both restart actions reset score, lives, stage progress, and feature discoveries. Pause is unavailable during briefings, life-loss interruptions, stage transitions, and game over.
 
 Coins are optional, but collecting every coin before reaching the exit earns the `COIN MONGER!` bonus and doubles that stage's coin award. The multiplier applies only when the stage is completed, never doubles score carried from earlier stages, and remains available after losing a reserve life because collected coins stay collected. A game over before the exit receives no bonus. Score saving remains deferred.
 
@@ -64,4 +69,4 @@ The deterministic game modules do not depend on Phaser. Rendering runs at the br
 
 Implemented: sparsely braided generated stages, reusable dead-end escape portals, loop-biased coin clusters, continuous buffered movement, optional coins, stage progression, run-scoped feature briefings, one delayed hunter with stable route choices, scarce evasive extra-life targets, telegraphed timed floor spikes, retained-life respawns, a responsive sprite legend, pixel presentation, and reproducible/debug URLs.
 
-Next: the ambusher and wanderer, moving blades, pause treatment, controller input, reactive audio, and local leaderboards.
+Next: the ambusher and wanderer, moving blades, controller input, reactive audio, and local leaderboards.

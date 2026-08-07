@@ -66,6 +66,7 @@ export class PlayScene extends Phaser.Scene {
   private introducedFeatureIds = new Set<StageFeatureId>()
   private stageIntroduction: Phaser.GameObjects.Container | null = null
   private respawnOverlay: Phaser.GameObjects.Container | null = null
+  private pauseMenu: Phaser.GameObjects.Container | null = null
   private observedPortalReturnArmed = false
   private maze!: Maze
   private simulation!: StageSimulation
@@ -105,6 +106,7 @@ export class PlayScene extends Phaser.Scene {
     this.runRestarting = false
     this.stageIntroduction = null
     this.respawnOverlay = null
+    this.pauseMenu = null
     this.observedPortalReturnArmed = false
     this.coinSprites.clear()
     this.spikeSprites.clear()
@@ -185,6 +187,15 @@ export class PlayScene extends Phaser.Scene {
   }
 
   update(_time: number, deltaMilliseconds: number): void {
+    if (this.pauseMenu !== null) {
+      if (Phaser.Input.Keyboard.JustDown(this.introductionEnterKey)) {
+        this.startNewRun()
+      } else if (Phaser.Input.Keyboard.JustDown(this.retrySeedKey)) {
+        this.retryCurrentSeed()
+      }
+      return
+    }
+
     if (this.runEndActive) {
       if (Phaser.Input.Keyboard.JustDown(this.introductionEnterKey)) {
         this.startNewRun()
@@ -490,6 +501,120 @@ export class PlayScene extends Phaser.Scene {
     this.introductionEnterKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER)
     this.introductionSpaceKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)
     this.retrySeedKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R)
+    window.addEventListener('keydown', this.handleWindowKeyDown)
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
+      window.removeEventListener('keydown', this.handleWindowKeyDown)
+    })
+  }
+
+  private readonly handleWindowKeyDown = (event: KeyboardEvent): void => {
+    if (event.key !== 'Escape' || event.repeat) {
+      return
+    }
+
+    event.preventDefault()
+    this.handleEscapeKey()
+  }
+
+  private handleEscapeKey(): void {
+    if (this.pauseMenu !== null) {
+      this.resumeFromPause()
+      return
+    }
+
+    if (
+      this.runEndActive
+      || this.stageResolved
+      || this.respawnOverlay !== null
+      || this.stageIntroduction !== null
+      || this.runRestarting
+    ) {
+      return
+    }
+
+    this.showPauseMenu()
+  }
+
+  private showPauseMenu(): void {
+    if (this.pauseMenu !== null || this.runRestarting) {
+      return
+    }
+
+    this.accumulator = 0
+    this.tweens.pauseAll()
+
+    const scrim = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x05080a, 0.76)
+      .setOrigin(0)
+    const panel = this.add.rectangle(0, 0, 600, 430, 0x05080a, 0.98)
+    panel.setStrokeStyle(4, 0x42e8df, 1)
+    const eyebrow = this.add.text(
+      0,
+      -164,
+      `STAGE ${String(this.stageNumber).padStart(2, '0')}  //  SEED ${this.runSeed.toString(16).toUpperCase().padStart(8, '0')}`,
+      {
+        fontFamily: '"Press Start 2P"',
+        fontSize: '12px',
+        color: '#8ba5aa',
+      },
+    ).setOrigin(0.5)
+    const headline = this.add.text(0, -112, 'PAUSED', {
+      fontFamily: '"Press Start 2P"',
+      fontSize: '30px',
+      color: '#ffcf52',
+    }).setOrigin(0.5)
+
+    this.pauseMenu = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2, [
+      scrim.setPosition(-GAME_WIDTH / 2, -GAME_HEIGHT / 2),
+      panel,
+      eyebrow,
+      headline,
+    ]).setDepth(40)
+
+    this.createPauseActionButton(0, -36, 'RETURN TO PLAY [ESC]', 0x79f25f, () => {
+      this.resumeFromPause()
+    })
+    this.createPauseActionButton(0, 44, 'RESTART SEED [R]', 0x42e8df, () => {
+      this.retryCurrentSeed()
+    })
+    this.createPauseActionButton(0, 124, 'NEW RUN [ENTER]', 0xff5364, () => {
+      this.startNewRun()
+    })
+  }
+
+  private resumeFromPause(): void {
+    if (this.pauseMenu === null) {
+      return
+    }
+
+    this.pauseMenu.destroy(true)
+    this.pauseMenu = null
+    this.tweens.resumeAll()
+    this.accumulator = 0
+  }
+
+  private createPauseActionButton(
+    x: number,
+    y: number,
+    label: string,
+    color: number,
+    activate: () => void,
+  ): void {
+    if (this.pauseMenu === null) {
+      return
+    }
+
+    const background = this.add.rectangle(x, y, 380, 58, 0x071318, 1)
+    background.setStrokeStyle(3, color, 1).setInteractive({ useHandCursor: true })
+    const text = this.add.text(x, y, label, {
+      fontFamily: '"Press Start 2P"',
+      fontSize: '12px',
+      color: '#f3fffe',
+    }).setOrigin(0.5)
+
+    background.on('pointerover', () => background.setFillStyle(color, 0.22))
+    background.on('pointerout', () => background.setFillStyle(0x071318, 1))
+    background.on('pointerdown', activate)
+    this.pauseMenu.add([background, text])
   }
 
   private showStageIntroduction(introduction: StageIntroduction): void {
