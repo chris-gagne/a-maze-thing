@@ -50,6 +50,8 @@ export interface StageSimulation {
   spikes: SpikeState[]
   portals: Set<number>
   portalUses: number
+  lastUsedPortalCellIndex: number | null
+  portalReturnArmed: boolean
   elapsedSeconds: number
   coins: Set<number>
   collectedCoins: number
@@ -153,6 +155,8 @@ export function createStageSimulation(
     spikes: [...(options.spikes ?? [])],
     portals,
     portalUses: 0,
+    lastUsedPortalCellIndex: null,
+    portalReturnArmed: false,
     elapsedSeconds: 0,
     coins,
     collectedCoins: 0,
@@ -391,6 +395,7 @@ function beginNextSegment(simulation: StageSimulation): boolean {
     player.direction = player.queuedDirection
     player.queuedDirection = null
     player.targetCellIndex = queuedTarget
+    armPortalReturnAfterLeavingEntrance(simulation)
     return true
   }
 
@@ -399,7 +404,26 @@ function beginNextSegment(simulation: StageSimulation): boolean {
   }
 
   player.targetCellIndex = getNeighborInDirection(simulation.maze, player.cellIndex, player.direction)
+  if (player.targetCellIndex !== null) {
+    armPortalReturnAfterLeavingEntrance(simulation)
+  }
   return player.targetCellIndex !== null
+}
+
+function armPortalReturnAfterLeavingEntrance(simulation: StageSimulation): void {
+  const entranceIndex = toIndex(
+    simulation.maze.entrance.x,
+    simulation.maze.entrance.y,
+    simulation.maze.width,
+  )
+
+  if (
+    simulation.player.cellIndex === entranceIndex
+    && simulation.player.targetCellIndex !== entranceIndex
+    && simulation.lastUsedPortalCellIndex !== null
+  ) {
+    simulation.portalReturnArmed = true
+  }
 }
 
 function arriveAtTarget(simulation: StageSimulation): boolean {
@@ -417,13 +441,28 @@ function arriveAtTarget(simulation: StageSimulation): boolean {
     simulation.collectedCoins += 1
   }
 
+  const entranceIndex = toIndex(
+    simulation.maze.entrance.x,
+    simulation.maze.entrance.y,
+    simulation.maze.width,
+  )
+
   if (simulation.portals.has(targetCellIndex)) {
-    const entranceIndex = toIndex(
-      simulation.maze.entrance.x,
-      simulation.maze.entrance.y,
-      simulation.maze.width,
-    )
+    simulation.lastUsedPortalCellIndex = targetCellIndex
+    simulation.portalReturnArmed = false
     resetMovingEntity(simulation.player, entranceIndex)
+    simulation.player.direction = null
+    simulation.player.queuedDirection = null
+    simulation.portalUses += 1
+    return true
+  }
+
+  if (
+    targetCellIndex === entranceIndex
+    && simulation.portalReturnArmed
+    && simulation.lastUsedPortalCellIndex !== null
+  ) {
+    resetMovingEntity(simulation.player, simulation.lastUsedPortalCellIndex)
     simulation.player.direction = null
     simulation.player.queuedDirection = null
     simulation.portalUses += 1
@@ -671,6 +710,8 @@ function collectLifeTargetIfCaught(simulation: StageSimulation): void {
 function loseLife(simulation: StageSimulation): void {
   simulation.lives -= 1
   simulation.livesLost += 1
+  simulation.lastUsedPortalCellIndex = null
+  simulation.portalReturnArmed = false
 
   if (simulation.lives === 0) {
     simulation.gameOver = true

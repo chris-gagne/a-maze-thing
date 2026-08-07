@@ -353,6 +353,87 @@ describe('stage simulation', () => {
     expect(ordinarySimulation.player.cellIndex).toBe(1)
     expect(ordinarySimulation.portalUses).toBe(0)
   })
+
+  it('returns from Start to the last portal only after leaving Start', () => {
+    const maze = createBranchedCorridor()
+    const simulation = createStageSimulation(maze, { portalIndices: [2] })
+
+    queuePlayerDirection(simulation, Direction.East)
+    updateStageSimulation(simulation, 2, 1)
+
+    expect(simulation.player.cellIndex).toBe(0)
+    expect(simulation.lastUsedPortalCellIndex).toBe(2)
+    expect(simulation.portalReturnArmed).toBe(false)
+    expect(simulation.portalUses).toBe(1)
+
+    queuePlayerDirection(simulation, Direction.North)
+    updateStageSimulation(simulation, 0.5, 1)
+    expect(simulation.player.cellIndex).toBe(0)
+    expect(simulation.portalReturnArmed).toBe(false)
+
+    queuePlayerDirection(simulation, Direction.East)
+    updateStageSimulation(simulation, 0.5, 1)
+    expect(simulation.portalReturnArmed).toBe(true)
+    expect(getPlayerGridPosition(simulation)).toEqual({ x: 0.5, y: 0 })
+
+    queuePlayerDirection(simulation, Direction.West)
+    updateStageSimulation(simulation, 1.5, 1)
+
+    expect(simulation.player.cellIndex).toBe(2)
+    expect(simulation.player.targetCellIndex).toBeNull()
+    expect(simulation.player.progress).toBe(0)
+    expect(simulation.player.direction).toBeNull()
+    expect(simulation.player.queuedDirection).toBeNull()
+    expect(simulation.lastUsedPortalCellIndex).toBe(2)
+    expect(simulation.portalReturnArmed).toBe(true)
+    expect(simulation.portalUses).toBe(2)
+
+    queuePlayerDirection(simulation, Direction.West)
+    updateStageSimulation(simulation, 2, 1)
+    expect(simulation.player.cellIndex).toBe(2)
+    expect(simulation.portalUses).toBe(3)
+  })
+
+  it('replaces the Start return destination with the latest portal used', () => {
+    const maze = createBranchedCorridor()
+    const simulation = createStageSimulation(maze, { portalIndices: [2, 3] })
+
+    queuePlayerDirection(simulation, Direction.East)
+    updateStageSimulation(simulation, 2, 1)
+    expect(simulation.lastUsedPortalCellIndex).toBe(2)
+
+    queuePlayerDirection(simulation, Direction.South)
+    updateStageSimulation(simulation, 1, 1)
+
+    expect(simulation.player.cellIndex).toBe(0)
+    expect(simulation.lastUsedPortalCellIndex).toBe(3)
+    expect(simulation.portalReturnArmed).toBe(false)
+    expect(simulation.portalUses).toBe(2)
+  })
+
+  it('applies normal collision risk at the return portal and clears the link on life loss', () => {
+    const maze = createBranchedCorridor()
+    const simulation = createStageSimulation(maze, {
+      hunter: { startCellIndex: 2, releaseDelaySeconds: 0 },
+      portalIndices: [2],
+      lives: 2,
+    })
+    simulation.player.cellIndex = 1
+    simulation.lastUsedPortalCellIndex = 2
+    simulation.portalReturnArmed = true
+    simulation.hunter!.active = true
+    simulation.hunter!.releaseStarted = true
+
+    queuePlayerDirection(simulation, Direction.West)
+    updateStageSimulation(simulation, 1, 1)
+
+    expect(simulation.portalUses).toBe(1)
+    expect(simulation.lives).toBe(1)
+    expect(simulation.livesLost).toBe(1)
+    expect(simulation.player.cellIndex).toBe(0)
+    expect(simulation.lastUsedPortalCellIndex).toBeNull()
+    expect(simulation.portalReturnArmed).toBe(false)
+  })
 })
 
 function createFourCellLoop(): Maze {
