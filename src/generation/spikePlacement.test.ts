@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { createCoinPlacement } from './coinPlacement'
 import { placeLifeTarget } from './lifeTargetPlacement'
 import { generateMaze, getOpenNeighborIndices, toIndex } from './maze'
+import { placePortals } from './portalPlacement'
 import { placeSpikes } from './spikePlacement'
 
 describe('placeSpikes', () => {
@@ -37,22 +38,28 @@ describe('placeSpikes', () => {
   it('composes hazards and coins without overlaps or weakened placement guarantees', () => {
     for (let seed = 0; seed < 100; seed += 1) {
       const maze = generateMaze(15, 11, seed)
-      const lifeTargetIndex = placeLifeTarget(maze, 8, 1, seed ^ 0x1fef00d)
+      const portals = placePortals(maze, seed ^ 0xa4dfed5)
+      const lifeTargetIndex = placeLifeTarget(maze, 8, 1, seed ^ 0x1fef00d, portals)
+      const portalReservations = lifeTargetIndex === null
+        ? portals
+        : [...portals, lifeTargetIndex]
       const spikes = placeSpikes(
         maze,
         8,
         seed ^ 0x5a1ce5,
-        lifeTargetIndex === null ? [] : [lifeTargetIndex],
+        portalReservations,
       )
-      const occupied = new Set(spikes.map((spike) => spike.cellIndex))
-      if (lifeTargetIndex !== null) {
-        occupied.add(lifeTargetIndex)
-      }
+      const occupied = new Set([
+        ...portalReservations,
+        ...spikes.map((spike) => spike.cellIndex),
+      ])
       const placement = createCoinPlacement(maze, seed ^ 0xc01dcafe, occupied)
       const coins = new Set(placement.indices)
       const availableCells = maze.cells.length - 2 - occupied.size
 
       expect(placement.indices.every((index) => !occupied.has(index))).toBe(true)
+      expect(portals.every((index) => index !== lifeTargetIndex)).toBe(true)
+      expect(spikes.every((spike) => !portals.includes(spike.cellIndex))).toBe(true)
       expect(placement.indices.length).toBeGreaterThanOrEqual(Math.ceil(availableCells * 0.52))
       expect(placement.indices.length).toBeLessThanOrEqual(Math.floor(availableCells * 0.78))
       expect(placement.loopAnchors).toHaveLength(maze.braids.length)

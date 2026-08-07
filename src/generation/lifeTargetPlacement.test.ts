@@ -29,4 +29,15 @@ describe('placeLifeTarget', () => {
     expect(spawnCount).toBeGreaterThanOrEqual(25)
     expect(spawnCount).toBeLessThanOrEqual(65)
   })
+
+  it('never spawns on a reserved cell', () => {
+    const maze = generateMaze(15, 11, 813)
+
+    for (let seed = 0; seed < 200; seed += 1) {
+      const initial = placeLifeTarget(maze, 4, 1, seed)
+      if (initial !== null) {
+        expect(placeLifeTarget(maze, 4, 1, seed, [initial])).not.toBe(initial)
+      }
+    }
+  })
 })

@@ -14,6 +14,7 @@ import { getSpikePhase, SpikePhase } from '../game/spikeTiming'
 import { createCoinPlacement } from '../generation/coinPlacement'
 import { placeLifeTarget } from '../generation/lifeTargetPlacement'
 import { generateMaze, type Maze, Wall } from '../generation/maze'
+import { placePortals } from '../generation/portalPlacement'
 import { placeSpikes } from '../generation/spikePlacement'
 import { createPixelTextures, TextureKey } from '../presentation/pixelTextures'
 
@@ -65,6 +66,7 @@ export class PlayScene extends Phaser.Scene {
   private loopAnchors: number[] = []
   private observedLivesLost = 0
   private observedLivesGained = 0
+  private observedPortalUses = 0
 
   constructor() {
     super('play')
@@ -83,6 +85,7 @@ export class PlayScene extends Phaser.Scene {
     this.lifeTargetSprite = null
     this.observedLivesLost = 0
     this.observedLivesGained = 0
+    this.observedPortalUses = 0
   }
 
   create(): void {
@@ -92,22 +95,25 @@ export class PlayScene extends Phaser.Scene {
     const dimensions = getStageDimensions(this.stageNumber)
     const stageSeed = deriveStageSeed(this.runSeed, this.stageNumber)
     this.maze = generateMaze(dimensions.width, dimensions.height, stageSeed)
+    const portalIndices = placePortals(this.maze, stageSeed ^ 0xa4dfed5)
     const lifeTargetIndex = placeLifeTarget(
       this.maze,
       this.stageNumber,
       this.lives,
       stageSeed ^ 0x1fef00d,
+      portalIndices,
     )
+    const portalReservations = lifeTargetIndex === null
+      ? portalIndices
+      : [...portalIndices, lifeTargetIndex]
     const spikePlacement = placeSpikes(
       this.maze,
       this.stageNumber,
       stageSeed ^ 0x5a1ce5,
-      lifeTargetIndex === null ? [] : [lifeTargetIndex],
+      portalReservations,
     )
     const spikeIndices = new Set(spikePlacement.map((spike) => spike.cellIndex))
-    const occupiedIndices = lifeTargetIndex === null
-      ? spikeIndices
-      : new Set([lifeTargetIndex, ...spikeIndices])
+    const occupiedIndices = new Set([...portalReservations, ...spikeIndices])
     const coinPlacement = createCoinPlacement(
       this.maze,
       stageSeed ^ 0xc01dcafe,
@@ -123,6 +129,7 @@ export class PlayScene extends Phaser.Scene {
       },
       lifeTarget: lifeTargetIndex === null ? undefined : { startCellIndex: lifeTargetIndex },
       spikes: spikePlacement,
+      portalIndices,
       lives: this.lives,
     })
     this.mazeOrigin.x = Math.floor((GAME_WIDTH - this.maze.width * CELL_SIZE) / 2)
@@ -154,6 +161,7 @@ export class PlayScene extends Phaser.Scene {
 
     this.syncPresentation()
     this.syncLifeEvents()
+    this.syncPortalEvents()
 
     if (this.simulation.complete) {
       this.resolveStage()
@@ -215,6 +223,24 @@ export class PlayScene extends Phaser.Scene {
     if (isMazeDebugEnabled()) {
       this.drawMazeDebug()
     }
+
+    const portalSprites = [...this.simulation.portals].map((portalIndex) => {
+      const cell = this.maze.cells[portalIndex]
+      return this.add.image(
+        this.cellCenterX(cell.x),
+        this.cellCenterY(cell.y),
+        TextureKey.Portal,
+      ).setDepth(1)
+    })
+    this.tweens.add({
+      targets: portalSprites,
+      alpha: { from: 0.55, to: 1 },
+      duration: 460,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Stepped',
+      easeParams: [3],
+    })
 
     for (const spike of this.simulation.spikes) {
       const cell = this.maze.cells[spike.cellIndex]
@@ -470,6 +496,23 @@ export class PlayScene extends Phaser.Scene {
       this.showStatusMessage('LIFE LOST', '#ff5364')
       this.cameras.main.flash(180, 255, 83, 100, false)
     }
+  }
+
+  private syncPortalEvents(): void {
+    if (this.simulation.portalUses <= this.observedPortalUses) {
+      return
+    }
+
+    this.observedPortalUses = this.simulation.portalUses
+    this.playerSprite.setScale(1.45)
+    this.cameras.main.flash(130, 56, 247, 237, false)
+    this.tweens.add({
+      targets: this.playerSprite,
+      scale: 1,
+      duration: 180,
+      ease: 'Stepped',
+      easeParams: [3],
+    })
   }
 
   private showStatusMessage(message: string, color: string): void {

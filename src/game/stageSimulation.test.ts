@@ -298,6 +298,61 @@ describe('stage simulation', () => {
     expect(simulation.livesLost).toBe(1)
     expect(simulation.gameOver).toBe(true)
   })
+
+  it('reuses a portal to return only the player to the entrance', () => {
+    const maze = createThreeCellLine()
+    const simulation = createStageSimulation(maze, {
+      coinIndices: [1],
+      hunter: { startCellIndex: 2, releaseDelaySeconds: 0 },
+      lifeTarget: { startCellIndex: 2 },
+      portalIndices: [1],
+      lives: 2,
+    })
+    simulation.hunter!.active = true
+    simulation.hunter!.releaseStarted = true
+    const hunterBefore = { ...simulation.hunter! }
+    const elapsedBefore = simulation.elapsedSeconds
+
+    for (let use = 1; use <= 2; use += 1) {
+      queuePlayerDirection(simulation, Direction.East)
+      updateStageSimulation(simulation, 2, 1)
+
+      expect(simulation.player.cellIndex).toBe(0)
+      expect(simulation.player.targetCellIndex).toBeNull()
+      expect(simulation.player.progress).toBe(0)
+      expect(simulation.player.direction).toBeNull()
+      expect(simulation.player.queuedDirection).toBeNull()
+      expect(simulation.portalUses).toBe(use)
+    }
+
+    expect(simulation.hunter).toEqual(hunterBefore)
+    expect(simulation.lifeTarget?.cellIndex).toBe(2)
+    expect(simulation.lives).toBe(2)
+    expect(simulation.livesLost).toBe(0)
+    expect(simulation.collectedCoins).toBe(1)
+    expect(simulation.coins.size).toBe(0)
+    expect(simulation.elapsedSeconds).toBe(elapsedBefore + 4)
+    expect(simulation.complete).toBe(false)
+  })
+
+  it('does not teleport non-player entities or players at ordinary dead ends', () => {
+    const maze = createThreeCellLine()
+    const simulation = createStageSimulation(maze, {
+      hunter: { startCellIndex: 2, releaseDelaySeconds: 0 },
+      lifeTarget: { startCellIndex: 2 },
+      portalIndices: [1],
+    })
+
+    updateStageSimulation(simulation, 1, 0, 0, 1)
+    expect(simulation.lifeTarget?.cellIndex).toBe(1)
+    expect(simulation.portalUses).toBe(0)
+
+    const ordinarySimulation = createStageSimulation(maze)
+    queuePlayerDirection(ordinarySimulation, Direction.East)
+    updateStageSimulation(ordinarySimulation, 1, 1)
+    expect(ordinarySimulation.player.cellIndex).toBe(1)
+    expect(ordinarySimulation.portalUses).toBe(0)
+  })
 })
 
 function createFourCellLoop(): Maze {

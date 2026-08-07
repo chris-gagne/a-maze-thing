@@ -48,6 +48,8 @@ export interface StageSimulation {
   hunter: HunterState | null
   lifeTarget: LifeTargetState | null
   spikes: SpikeState[]
+  portals: Set<number>
+  portalUses: number
   elapsedSeconds: number
   coins: Set<number>
   collectedCoins: number
@@ -68,6 +70,7 @@ export interface StageSimulationOptions {
     startCellIndex: number
   }
   spikes?: Iterable<SpikeState>
+  portalIndices?: Iterable<number>
   lives?: number
 }
 
@@ -106,6 +109,9 @@ export function createStageSimulation(
 
   coins.delete(entranceIndex)
   coins.delete(exitIndex)
+  const portals = new Set(options.portalIndices ?? [])
+  portals.delete(entranceIndex)
+  portals.delete(exitIndex)
   const lives = options.lives ?? 1
 
   if (!Number.isInteger(lives) || lives < 1) {
@@ -145,6 +151,8 @@ export function createStageSimulation(
           collected: false,
         },
     spikes: [...(options.spikes ?? [])],
+    portals,
+    portalUses: 0,
     elapsedSeconds: 0,
     coins,
     collectedCoins: 0,
@@ -230,7 +238,9 @@ function updatePlayer(
     remainingDistance -= distanceTraveled
 
     if (simulation.player.progress >= 1 - ARRIVAL_EPSILON) {
-      arriveAtTarget(simulation)
+      if (arriveAtTarget(simulation)) {
+        return
+      }
     }
   }
 }
@@ -392,11 +402,11 @@ function beginNextSegment(simulation: StageSimulation): boolean {
   return player.targetCellIndex !== null
 }
 
-function arriveAtTarget(simulation: StageSimulation): void {
+function arriveAtTarget(simulation: StageSimulation): boolean {
   const targetCellIndex = simulation.player.targetCellIndex
 
   if (targetCellIndex === null) {
-    return
+    return false
   }
 
   simulation.player.cellIndex = targetCellIndex
@@ -407,8 +417,22 @@ function arriveAtTarget(simulation: StageSimulation): void {
     simulation.collectedCoins += 1
   }
 
+  if (simulation.portals.has(targetCellIndex)) {
+    const entranceIndex = toIndex(
+      simulation.maze.entrance.x,
+      simulation.maze.entrance.y,
+      simulation.maze.width,
+    )
+    resetMovingEntity(simulation.player, entranceIndex)
+    simulation.player.direction = null
+    simulation.player.queuedDirection = null
+    simulation.portalUses += 1
+    return true
+  }
+
   const exitIndex = toIndex(simulation.maze.exit.x, simulation.maze.exit.y, simulation.maze.width)
   simulation.complete = targetCellIndex === exitIndex
+  return false
 }
 
 function findNextCellTowardPlayer(simulation: StageSimulation): number | null {

@@ -8,6 +8,7 @@ export function placeLifeTarget(
   stageNumber: number,
   lives: number,
   seed: number,
+  reservedIndices: Iterable<number> = [],
 ): number | null {
   if (stageNumber < 2 || lives > 1) {
     return null
@@ -20,12 +21,18 @@ export function placeLifeTarget(
 
   const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
   const exitIndex = toIndex(maze.exit.x, maze.exit.y, maze.width)
+  const reserved = new Set(reservedIndices)
   const distances = getDistances(maze, entranceIndex)
   const maximumDistance = Math.max(...distances)
   const minimumDistance = Math.ceil(maximumDistance * 0.55)
   const candidates = maze.cells
     .map((_, index) => index)
-    .filter((index) => index !== entranceIndex && index !== exitIndex && distances[index] >= minimumDistance)
+    .filter((index) => {
+      return index !== entranceIndex
+        && index !== exitIndex
+        && !reserved.has(index)
+        && distances[index] >= minimumDistance
+    })
 
   return candidates.length === 0
     ? null

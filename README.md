@@ -19,6 +19,8 @@ Movement continues until blocked. The hunter remains dormant until the player st
 
 Extra-life targets prefer routes that increase their distance from the player. At a dead end or local maximum, they commit to a route toward a less-visited region of the maze instead of bouncing between the same cells.
 
+Some distant dead ends contain reusable portals. Entering one returns the player to the maze entrance while the hunter, collected coins, hazards, and other stage state continue unchanged. Portals affect the player only.
+
 ## Reproducible runs
 
 Append a decimal or hexadecimal seed to the URL:
@@ -28,7 +30,7 @@ http://localhost:5173/?seed=4271
 http://localhost:5173/?seed=DEADBEEF
 ```
 
-The same run seed, stage number, and retained-life state reproduce the same maze, coin layout, extra-life target, and spike cycle. Retained lives matter because extra-life targets appear only when the player has at most one life, and occupied cells are excluded from coin and spike placement.
+The same run seed, stage number, and retained-life state reproduce the same maze, portals, coin layout, extra-life target, and spike cycle. Retained lives matter because extra-life targets appear only when the player has at most one life, and occupied cells are excluded from coin and spike placement.
 
 Append `&debug=maze` to highlight escape-loop paths, newly opened passages, and loop coin anchors:
 
@@ -38,7 +40,7 @@ http://localhost:5173/?seed=DEADBEEF&debug=maze
 
 ## Architecture
 
-- `src/generation/`: seeded randomness, perfect-maze foundations, controlled escape loops, final endpoints, coin placement, and fair spike placement
+- `src/generation/`: seeded randomness, perfect-maze foundations, controlled escape loops, final endpoints, dead-end portals, coin placement, and fair spike placement
 - `src/game/`: framework-independent movement, scoring, hunter pursuit, timed hazards, collision, and seed parsing
 - `src/scenes/`: Phaser input and rendering adapter
 - `src/presentation/`: generated original pixel textures
@@ -47,6 +49,6 @@ The deterministic game modules do not depend on Phaser. Rendering runs at the br
 
 ## Current slice
 
-Implemented: sparsely braided generated stages, loop-biased coin clusters, continuous buffered movement, optional coins, stage progression, one delayed hunter with stable route choices, scarce evasive extra-life targets, telegraphed timed floor spikes, retained-life respawns, responsive pixel presentation, and reproducible/debug URLs.
+Implemented: sparsely braided generated stages, reusable dead-end escape portals, loop-biased coin clusters, continuous buffered movement, optional coins, stage progression, one delayed hunter with stable route choices, scarce evasive extra-life targets, telegraphed timed floor spikes, retained-life respawns, a responsive sprite legend, pixel presentation, and reproducible/debug URLs.
 
 Next: the ambusher and wanderer, moving blades, pause treatment, controller input, reactive audio, and local leaderboards.
