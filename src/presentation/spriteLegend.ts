@@ -23,7 +23,7 @@ export const LEGEND_ENTRIES: readonly LegendEntry[] = [
   { name: 'Extra Life', rule: 'Catch it to gain one life.', textureKey: TextureKey.LifeTarget },
   {
     name: 'Spikes',
-    rule: 'Amber warns; coral is dangerous.',
+    rule: 'Amber warns; coral hurts you and blocks enemies.',
     textureKey: TextureKey.Spike,
     spikePhases: true,
   },

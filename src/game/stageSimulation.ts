@@ -1,4 +1,5 @@
 import { type GridPoint, type Maze, toIndex, Wall } from '../generation/maze'
+import { findNextEnemyCellTowardIndex } from './enemyNavigation'
 import { getSpikePhase, type SpikeState, SpikePhase } from './spikeTiming'
 
 export { getSpikePhase, SpikePhase } from './spikeTiming'
@@ -482,40 +483,28 @@ function findNextCellTowardPlayer(simulation: StageSimulation): number | null {
   }
 
   const targetIndex = simulation.player.targetCellIndex ?? simulation.player.cellIndex
-  const distances = new Int32Array(simulation.maze.cells.length).fill(-1)
-  const queue = new Int32Array(simulation.maze.cells.length)
-  let head = 0
-  let tail = 0
-  queue[tail++] = targetIndex
-  distances[targetIndex] = 0
+  return findNextEnemyCellTowardIndex(
+    simulation.maze,
+    hunter.cellIndex,
+    targetIndex,
+    getActiveSpikeCellIndices(simulation),
+    getEnemyNeighborIndices,
+  )
+}
 
-  while (head < tail) {
-    const currentIndex = queue[head++]
+function getEnemyNeighborIndices(maze: Maze, cellIndex: number): readonly number[] {
+  return HUNTER_DIRECTION_PRIORITY.flatMap((direction) => {
+    const neighborIndex = getNeighborInDirection(maze, cellIndex, direction)
+    return neighborIndex === null ? [] : [neighborIndex]
+  })
+}
 
-    for (const direction of HUNTER_DIRECTION_PRIORITY) {
-      const neighborIndex = getNeighborInDirection(simulation.maze, currentIndex, direction)
-
-      if (neighborIndex !== null && distances[neighborIndex] === -1) {
-        distances[neighborIndex] = distances[currentIndex] + 1
-        queue[tail++] = neighborIndex
-      }
-    }
-  }
-
-  let bestNeighbor: number | null = null
-
-  for (const direction of HUNTER_DIRECTION_PRIORITY) {
-    const neighborIndex = getNeighborInDirection(simulation.maze, hunter.cellIndex, direction)
-
-    if (
-      neighborIndex !== null
-      && (bestNeighbor === null || distances[neighborIndex] < distances[bestNeighbor])
-    ) {
-      bestNeighbor = neighborIndex
-    }
-  }
-
-  return bestNeighbor
+function getActiveSpikeCellIndices(simulation: StageSimulation): Set<number> {
+  return new Set(
+    simulation.spikes
+      .filter((spike) => getSpikePhase(spike, simulation.elapsedSeconds) === SpikePhase.Active)
+      .map((spike) => spike.cellIndex),
+  )
 }
 
 function entitiesOverlap(simulation: StageSimulation): boolean {

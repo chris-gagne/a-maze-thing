@@ -17,6 +17,8 @@ Create a production build with `npm run build` and run the deterministic test su
 
 Movement continues until blocked. The hunter remains dormant until the player starts moving, then follows from the entrance after a short delay.
 
+Floor spikes damage the player only while active. They never damage hostile enemies, but active spikes block new hunter routes; inactive, warning, and recovery phases remain traversable. Future ambusher and wanderer enemies will use the same blocker-aware navigation.
+
 Extra-life targets prefer routes that increase their distance from the player. At a dead end or local maximum, they commit to a route toward a less-visited region of the maze instead of bouncing between the same cells.
 
 Some distant dead ends contain reusable portals. Entering one returns the player to the maze entrance while the hunter, collected coins, hazards, and other stage state continue unchanged. After leaving the entrance, returning to it sends the player back to the last portal used. A newer portal replaces that return destination, and losing a life clears the link. Portals affect the player only.
@@ -41,7 +43,7 @@ http://localhost:5173/?seed=DEADBEEF&debug=maze
 ## Architecture
 
 - `src/generation/`: seeded randomness, perfect-maze foundations, controlled escape loops, final endpoints, dead-end portals, coin placement, and fair spike placement
-- `src/game/`: framework-independent movement, scoring, hunter pursuit, timed hazards, collision, and seed parsing
+- `src/game/`: framework-independent movement, scoring, blocker-aware enemy navigation, hunter pursuit, timed hazards, collision, and seed parsing
 - `src/scenes/`: Phaser input and rendering adapter
 - `src/presentation/`: generated original pixel textures
 

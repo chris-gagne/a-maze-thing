@@ -134,6 +134,98 @@ describe('stage simulation', () => {
     expect(simulation.gameOver).toBe(false)
   })
 
+  it('routes the hunter around active spikes', () => {
+    const simulation = createStageSimulation(createFourCellLoop(), {
+      hunter: { startCellIndex: 0, releaseDelaySeconds: 0 },
+      spikes: [{ cellIndex: 1, phaseOffsetSeconds: 2 }],
+    })
+    simulation.player.cellIndex = 3
+    simulation.hunter!.active = true
+    simulation.hunter!.releaseStarted = true
+
+    updateStageSimulation(simulation, 0.2, 0, 5)
+
+    expect(getSpikePhase(simulation.spikes[0], simulation.elapsedSeconds)).toBe(SpikePhase.Active)
+    expect(simulation.hunter?.cellIndex).toBe(2)
+    expect(simulation.livesLost).toBe(0)
+  })
+
+  it.each([
+    ['inactive', 2],
+    ['warning', 0.5],
+    ['recovery', 1.6],
+  ])('allows the hunter through a %s spike', (_phase, phaseOffsetSeconds) => {
+    const simulation = createStageSimulation(createThreeCellLine(), {
+      hunter: { startCellIndex: 0, releaseDelaySeconds: 0 },
+      spikes: [{ cellIndex: 1, phaseOffsetSeconds }],
+    })
+    simulation.player.cellIndex = 2
+    simulation.hunter!.active = true
+    simulation.hunter!.releaseStarted = true
+
+    updateStageSimulation(simulation, 1, 0, 1)
+
+    expect(simulation.hunter?.cellIndex).toBe(1)
+    expect(simulation.livesLost).toBe(0)
+  })
+
+  it('finishes a committed crossing when its spike becomes active', () => {
+    const simulation = createStageSimulation(createThreeCellLine(), {
+      hunter: { startCellIndex: 0, releaseDelaySeconds: 0 },
+      spikes: [{ cellIndex: 1, phaseOffsetSeconds: 1.55 }],
+    })
+    simulation.player.cellIndex = 2
+    simulation.hunter!.active = true
+    simulation.hunter!.releaseStarted = true
+
+    updateStageSimulation(simulation, 0.2, 0, 1)
+    expect(simulation.hunter?.targetCellIndex).toBe(1)
+    expect(simulation.hunter?.progress).toBeCloseTo(0.2)
+
+    updateStageSimulation(simulation, 0.8, 0, 1)
+
+    expect(getSpikePhase(simulation.spikes[0], simulation.elapsedSeconds)).toBe(SpikePhase.Active)
+    expect(simulation.hunter?.cellIndex).toBe(1)
+    expect(simulation.livesLost).toBe(0)
+  })
+
+  it('waits behind active spikes, then resumes when the route reopens', () => {
+    const simulation = createStageSimulation(createThreeCellLine(), {
+      hunter: { startCellIndex: 0, releaseDelaySeconds: 0 },
+      spikes: [{ cellIndex: 1, phaseOffsetSeconds: 2 }],
+    })
+    simulation.player.cellIndex = 2
+    simulation.hunter!.active = true
+    simulation.hunter!.releaseStarted = true
+
+    updateStageSimulation(simulation, 0.2, 0, 1)
+    expect(simulation.hunter?.cellIndex).toBe(0)
+    expect(simulation.hunter?.targetCellIndex).toBeNull()
+
+    updateStageSimulation(simulation, 0.6, 0, 1)
+
+    expect(getSpikePhase(simulation.spikes[0], simulation.elapsedSeconds)).toBe(SpikePhase.Recovery)
+    expect(simulation.hunter?.targetCellIndex).toBe(1)
+    expect(simulation.hunter?.progress).toBeCloseTo(0.6)
+  })
+
+  it('lets the hunter leave an active spike without taking damage', () => {
+    const simulation = createStageSimulation(createThreeCellLine(), {
+      hunter: { startCellIndex: 1, releaseDelaySeconds: 0 },
+      spikes: [{ cellIndex: 1, phaseOffsetSeconds: 2 }],
+    })
+    simulation.player.cellIndex = 2
+    simulation.hunter!.active = true
+    simulation.hunter!.releaseStarted = true
+
+    updateStageSimulation(simulation, 0.2, 0, 1)
+
+    expect(simulation.hunter?.cellIndex).toBe(1)
+    expect(simulation.hunter?.targetCellIndex).toBe(2)
+    expect(simulation.hunter?.progress).toBeCloseTo(0.2)
+    expect(simulation.livesLost).toBe(0)
+  })
+
   it('keeps the direct exit route winnable across braided seeds', () => {
     for (let seed = 0; seed < 100; seed += 1) {
       const maze = generateMaze(11, 7, seed)
