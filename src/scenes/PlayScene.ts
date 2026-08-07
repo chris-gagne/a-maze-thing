@@ -11,6 +11,13 @@ import {
 } from '../game/stageSimulation'
 import { parseRunSeed } from '../game/runSeed'
 import { INITIAL_LIVES } from '../game/lifeRules'
+import {
+  DEFAULT_DIFFICULTY,
+  DIFFICULTY_PRESETS,
+  getDifficultyPreset,
+  parseDifficulty,
+  type DifficultyId,
+} from '../game/difficultySettings'
 import { calculateStageCoinAward } from '../game/stageScoring'
 import { getSpikePhase, SpikePhase } from '../game/spikeTiming'
 import {
@@ -38,6 +45,12 @@ const HUNTER_SPEED = 3.25
 const HUNTER_RELEASE_DELAY_SECONDS = 2.4
 const LIFE_TARGET_SPEED = 3
 const RESPAWN_PAUSE_MILLISECONDS = 1250
+const DIFFICULTY_COLORS: Readonly<Record<DifficultyId, number>> = {
+  casual: 0x79f25f,
+  'easy-peasy': 0x42e8df,
+  normal: 0xffcf52,
+  overclocked: 0xff5364,
+}
 
 interface RunSceneData {
   stageNumber: number
@@ -45,6 +58,8 @@ interface RunSceneData {
   runSeed: number
   lives: number
   introducedFeatureIds: readonly StageFeatureId[]
+  difficulty: DifficultyId
+  selectDifficulty: boolean
 }
 
 interface MovementKeys {
@@ -60,6 +75,11 @@ export class PlayScene extends Phaser.Scene {
   private runSeed = 0
   private lives = 1
   private stageEntryLives = 1
+  private difficulty: DifficultyId = DEFAULT_DIFFICULTY
+  private difficultySelectionRequired = false
+  private difficultyMenu: Phaser.GameObjects.Container | null = null
+  private selectedDifficultyIndex = 0
+  private difficultyOptionBackgrounds: Phaser.GameObjects.Rectangle[] = []
   private accumulator = 0
   private stageResolved = false
   private runEndActive = false
@@ -72,7 +92,7 @@ export class PlayScene extends Phaser.Scene {
   private maze!: Maze
   private simulation!: StageSimulation
   private mazeOrigin = { x: 0, y: MAZE_TOP }
-  private hunterSprite!: Phaser.GameObjects.Image
+  private hunterSprite: Phaser.GameObjects.Image | null = null
   private lifeTargetSprite: Phaser.GameObjects.Image | null = null
   private playerSprite!: Phaser.GameObjects.Image
   private startMarker!: Phaser.GameObjects.Graphics
@@ -97,11 +117,21 @@ export class PlayScene extends Phaser.Scene {
   }
 
   init(data: Partial<RunSceneData> = {}): void {
+    const searchParams = new URLSearchParams(location.search)
+    const requestedSeed = parseRunSeed(searchParams.get('seed'))
+    const requestedDifficulty = parseDifficulty(searchParams.get('difficulty'))
     this.stageNumber = data.stageNumber ?? 1
     this.carriedScore = data.carriedScore ?? 0
-    this.runSeed = data.runSeed ?? createRunSeed()
+    this.runSeed = data.runSeed ?? requestedSeed ?? createRandomRunSeed()
     this.lives = data.lives ?? INITIAL_LIVES
     this.stageEntryLives = this.lives
+    this.difficulty = data.difficulty ?? requestedDifficulty ?? DEFAULT_DIFFICULTY
+    this.difficultySelectionRequired = data.selectDifficulty
+      ?? (data.difficulty === undefined && (requestedSeed === null || requestedDifficulty === null))
+    this.selectedDifficultyIndex = DIFFICULTY_PRESETS.findIndex((preset) => {
+      return preset.id === DEFAULT_DIFFICULTY
+    })
+    this.difficultyOptionBackgrounds = []
     this.introducedFeatureIds = new Set(data.introducedFeatureIds ?? [])
     this.accumulator = 0
     this.stageResolved = false
@@ -110,10 +140,12 @@ export class PlayScene extends Phaser.Scene {
     this.stageIntroduction = null
     this.respawnOverlay = null
     this.pauseMenu = null
+    this.difficultyMenu = null
     this.observedPortalReturnArmed = false
     this.coinSprites.clear()
     this.spikeSprites.clear()
     this.loopAnchors = []
+    this.hunterSprite = null
     this.lifeTargetSprite = null
     this.observedLivesLost = 0
     this.observedLivesGained = 0
@@ -123,42 +155,53 @@ export class PlayScene extends Phaser.Scene {
   create(): void {
     createPixelTextures(this)
     this.drawBackdrop()
+    this.bindInput()
+
+    if (this.difficultySelectionRequired) {
+      this.showDifficultySelector()
+      return
+    }
 
     const dimensions = getStageDimensions(this.stageNumber)
     const stageSeed = deriveStageSeed(this.runSeed, this.stageNumber)
+    const fullGame = getDifficultyPreset(this.difficulty).fullGame
     this.maze = generateMaze(dimensions.width, dimensions.height, stageSeed)
-    const portalIndices = placePortals(this.maze, stageSeed ^ 0xa4dfed5)
-    const lifeTargetIndex = placeLifeTarget(
-      this.maze,
-      this.stageNumber,
-      this.lives,
-      stageSeed ^ 0x1fef00d,
-      portalIndices,
-    )
+    const portalIndices = fullGame ? placePortals(this.maze, stageSeed ^ 0xa4dfed5) : []
+    const lifeTargetIndex = fullGame
+      ? placeLifeTarget(
+          this.maze,
+          this.stageNumber,
+          this.lives,
+          stageSeed ^ 0x1fef00d,
+          portalIndices,
+        )
+      : null
     const portalReservations = lifeTargetIndex === null
       ? portalIndices
       : [...portalIndices, lifeTargetIndex]
-    const spikePlacement = placeSpikes(
-      this.maze,
-      this.stageNumber,
-      stageSeed ^ 0x5a1ce5,
-      portalReservations,
-    )
+    const spikePlacement = fullGame
+      ? placeSpikes(
+          this.maze,
+          this.stageNumber,
+          stageSeed ^ 0x5a1ce5,
+          portalReservations,
+        )
+      : []
     const spikeIndices = new Set(spikePlacement.map((spike) => spike.cellIndex))
     const occupiedIndices = new Set([...portalReservations, ...spikeIndices])
-    const coinPlacement = createCoinPlacement(
-      this.maze,
-      stageSeed ^ 0xc01dcafe,
-      occupiedIndices,
-    )
+    const coinPlacement = fullGame
+      ? createCoinPlacement(this.maze, stageSeed ^ 0xc01dcafe, occupiedIndices)
+      : { indices: [], loopAnchors: [] }
     this.loopAnchors = coinPlacement.loopAnchors
     const entranceIndex = this.maze.entrance.y * this.maze.width + this.maze.entrance.x
     this.simulation = createStageSimulation(this.maze, {
       coinIndices: coinPlacement.indices,
-      hunter: {
-        startCellIndex: entranceIndex,
-        releaseDelaySeconds: HUNTER_RELEASE_DELAY_SECONDS,
-      },
+      hunter: fullGame
+        ? {
+            startCellIndex: entranceIndex,
+            releaseDelaySeconds: HUNTER_RELEASE_DELAY_SECONDS,
+          }
+        : undefined,
       lifeTarget: lifeTargetIndex === null ? undefined : { startCellIndex: lifeTargetIndex },
       spikes: spikePlacement,
       portalIndices,
@@ -168,7 +211,6 @@ export class PlayScene extends Phaser.Scene {
 
     this.drawMaze()
     this.createHud(stageSeed)
-    this.bindInput()
     const presentFeatureIds: StageFeatureId[] = []
     if (spikePlacement.length > 0) {
       presentFeatureIds.push(StageFeature.Spikes)
@@ -181,6 +223,7 @@ export class PlayScene extends Phaser.Scene {
       this.stageNumber,
       presentFeatureIds,
       this.introducedFeatureIds,
+      !fullGame,
     )
     if (introduction !== null) {
       this.introducedFeatureIds = new Set(introduction.introducedFeatureIds)
@@ -190,6 +233,11 @@ export class PlayScene extends Phaser.Scene {
   }
 
   update(_time: number, deltaMilliseconds: number): void {
+    if (this.difficultyMenu !== null) {
+      this.updateDifficultySelectorInput()
+      return
+    }
+
     if (this.pauseMenu !== null) {
       if (Phaser.Input.Keyboard.JustDown(this.introductionEnterKey)) {
         this.startNewRun()
@@ -235,7 +283,7 @@ export class PlayScene extends Phaser.Scene {
       const livesLostBeforeUpdate = this.simulation.livesLost
       updateStageSimulation(
         this.simulation,
-        FIXED_STEP_SECONDS,
+        FIXED_STEP_SECONDS * getDifficultyPreset(this.difficulty).simulationSpeedMultiplier,
         PLAYER_SPEED,
         HUNTER_SPEED,
         LIFE_TARGET_SPEED,
@@ -366,9 +414,11 @@ export class PlayScene extends Phaser.Scene {
       easeParams: [3],
     })
 
-    this.hunterSprite = this.add.image(entranceX, entranceY, TextureKey.Hunter)
-    this.hunterSprite.setAlpha(0.45)
-    this.hunterSprite.setDepth(4)
+    if (this.simulation.hunter !== null) {
+      this.hunterSprite = this.add.image(entranceX, entranceY, TextureKey.Hunter)
+      this.hunterSprite.setAlpha(0.45)
+      this.hunterSprite.setDepth(4)
+    }
 
     const lifeTargetPosition = getLifeTargetGridPosition(this.simulation)
     if (lifeTargetPosition !== null) {
@@ -523,6 +573,10 @@ export class PlayScene extends Phaser.Scene {
   }
 
   private handleEscapeKey(): void {
+    if (this.difficultyMenu !== null) {
+      return
+    }
+
     if (this.pauseMenu !== null) {
       this.resumeFromPause()
       return
@@ -541,6 +595,121 @@ export class PlayScene extends Phaser.Scene {
     this.showPauseMenu()
   }
 
+  private showDifficultySelector(): void {
+    const scrim = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x05080a, 0.94)
+      .setOrigin(0)
+    const panel = this.add.rectangle(0, 0, 760, 650, 0x05080a, 0.99)
+    panel.setStrokeStyle(4, 0x42e8df, 1)
+    const eyebrow = this.add.text(0, -278, 'RUN CONFIGURATION // NEW SIGNAL', {
+      fontFamily: '"Press Start 2P"',
+      fontSize: '11px',
+      color: '#8ba5aa',
+    }).setOrigin(0.5)
+    const headline = this.add.text(0, -230, 'SELECT DIFFICULTY', {
+      fontFamily: '"Press Start 2P"',
+      fontSize: '26px',
+      color: '#ffcf52',
+    }).setOrigin(0.5)
+
+    this.difficultyMenu = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2, [
+      scrim.setPosition(-GAME_WIDTH / 2, -GAME_HEIGHT / 2),
+      panel,
+      eyebrow,
+      headline,
+    ]).setDepth(50)
+
+    const optionY = [-142, -38, 66, 170]
+    DIFFICULTY_PRESETS.forEach((preset, index) => {
+      const color = DIFFICULTY_COLORS[preset.id]
+      const background = this.add.rectangle(0, optionY[index], 620, 88, 0x071318, 1)
+      background.setInteractive({ useHandCursor: true })
+      const label = this.add.text(-284, optionY[index] - 20, preset.label, {
+        fontFamily: '"Press Start 2P"',
+        fontSize: '14px',
+        color: `#${color.toString(16).padStart(6, '0')}`,
+      }).setOrigin(0, 0.5)
+      const description = this.add.text(-284, optionY[index] + 20, preset.description, {
+        fontFamily: '"Space Grotesk Variable"',
+        fontSize: '16px',
+        color: '#f3fffe',
+        wordWrap: { width: 568 },
+      }).setOrigin(0, 0.5)
+
+      background.on('pointerover', () => {
+        this.selectedDifficultyIndex = index
+        this.refreshDifficultySelection()
+      })
+      background.on('pointerdown', () => {
+        this.selectedDifficultyIndex = index
+        this.confirmDifficultySelection()
+      })
+      this.difficultyOptionBackgrounds.push(background)
+      this.difficultyMenu?.add([background, label, description])
+    })
+
+    const prompt = this.add.text(0, 270, 'UP / DOWN TO SELECT  //  ENTER TO START', {
+      fontFamily: '"Press Start 2P"',
+      fontSize: '11px',
+      color: '#79f25f',
+    }).setOrigin(0.5)
+    this.difficultyMenu.add(prompt)
+    this.refreshDifficultySelection()
+  }
+
+  private updateDifficultySelectorInput(): void {
+    if (
+      Phaser.Input.Keyboard.JustDown(this.cursors.up)
+      || Phaser.Input.Keyboard.JustDown(this.movementKeys.up)
+    ) {
+      this.moveDifficultySelection(-1)
+    } else if (
+      Phaser.Input.Keyboard.JustDown(this.cursors.down)
+      || Phaser.Input.Keyboard.JustDown(this.movementKeys.down)
+    ) {
+      this.moveDifficultySelection(1)
+    } else if (
+      Phaser.Input.Keyboard.JustDown(this.introductionEnterKey)
+      || Phaser.Input.Keyboard.JustDown(this.introductionSpaceKey)
+    ) {
+      this.confirmDifficultySelection()
+    }
+  }
+
+  private moveDifficultySelection(offset: number): void {
+    this.selectedDifficultyIndex = (
+      this.selectedDifficultyIndex + offset + DIFFICULTY_PRESETS.length
+    ) % DIFFICULTY_PRESETS.length
+    this.refreshDifficultySelection()
+  }
+
+  private refreshDifficultySelection(): void {
+    this.difficultyOptionBackgrounds.forEach((background, index) => {
+      const preset = DIFFICULTY_PRESETS[index]
+      const selected = index === this.selectedDifficultyIndex
+      background.setFillStyle(selected ? DIFFICULTY_COLORS[preset.id] : 0x071318, selected ? 0.18 : 1)
+      background.setStrokeStyle(selected ? 4 : 2, DIFFICULTY_COLORS[preset.id], selected ? 1 : 0.55)
+    })
+  }
+
+  private confirmDifficultySelection(): void {
+    if (this.runRestarting || this.difficultyMenu === null) {
+      return
+    }
+
+    this.runRestarting = true
+    const difficulty = DIFFICULTY_PRESETS[this.selectedDifficultyIndex].id
+    updateRunConfigurationInUrl(this.runSeed, difficulty)
+    this.scene.restart({
+      stageNumber: 1,
+      carriedScore: 0,
+      runSeed: this.runSeed,
+      lives: INITIAL_LIVES,
+      introducedFeatureIds: [],
+      difficulty,
+      selectDifficulty: false,
+    })
+  }
+
   private showPauseMenu(): void {
     if (this.pauseMenu !== null || this.runRestarting) {
       return
@@ -556,7 +725,7 @@ export class PlayScene extends Phaser.Scene {
     const eyebrow = this.add.text(
       0,
       -204,
-      `STAGE ${String(this.stageNumber).padStart(2, '0')}  //  SEED ${this.runSeed.toString(16).toUpperCase().padStart(8, '0')}`,
+      `STAGE ${String(this.stageNumber).padStart(2, '0')}  //  ${getDifficultyPreset(this.difficulty).label}  //  SEED ${this.runSeed.toString(16).toUpperCase().padStart(8, '0')}`,
       {
         fontFamily: '"Press Start 2P"',
         fontSize: '12px',
@@ -692,7 +861,7 @@ export class PlayScene extends Phaser.Scene {
     this.playerSprite.setPosition(this.cellCenterX(position.x), this.cellCenterY(position.y))
 
     const hunterPosition = getHunterGridPosition(this.simulation)
-    if (hunterPosition !== null) {
+    if (hunterPosition !== null && this.hunterSprite !== null) {
       this.hunterSprite.setPosition(this.cellCenterX(hunterPosition.x), this.cellCenterY(hunterPosition.y))
       this.hunterSprite.setAlpha(this.simulation.hunter?.active ? 1 : 0.45)
     }
@@ -873,6 +1042,13 @@ export class PlayScene extends Phaser.Scene {
   private updateHud(): void {
     const score = this.carriedScore + this.simulation.collectedCoins
     this.lives = this.simulation.lives
+    if (!getDifficultyPreset(this.difficulty).fullGame) {
+      this.livesText.setText('CASUAL MODE')
+      this.scoreText.setText('')
+      this.remainingText.setText('')
+      return
+    }
+
     this.livesText.setText(`LIVES ${String(this.lives).padStart(2, '0')}`)
     this.scoreText.setText(`COINS ${String(score).padStart(4, '0')}`)
     this.remainingText.setText(`${String(this.simulation.coins.size).padStart(3, '0')} IN MAZE`)
@@ -880,6 +1056,7 @@ export class PlayScene extends Phaser.Scene {
 
   private resolveStage(): void {
     this.stageResolved = true
+    const casual = !getDifficultyPreset(this.difficulty).fullGame
     const award = calculateStageCoinAward(
       this.simulation.collectedCoins,
       this.simulation.coins.size,
@@ -900,13 +1077,13 @@ export class PlayScene extends Phaser.Scene {
     panel.setDepth(20)
 
     const headlineY = GAME_HEIGHT / 2 - (award.coinMonger ? 78 : 52)
-    this.add.text(GAME_WIDTH / 2, headlineY, 'STAGE CLEAR', {
+    this.add.text(GAME_WIDTH / 2, headlineY, casual ? 'MAZE SOLVED' : 'STAGE CLEAR', {
       fontFamily: '"Press Start 2P"',
       fontSize: '28px',
       color: '#79f25f',
     }).setOrigin(0.5).setDepth(21)
 
-    if (award.coinMonger) {
+    if (award.coinMonger && !casual) {
       this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 18, 'COIN MONGER!  2X', {
         fontFamily: '"Press Start 2P"',
         fontSize: '20px',
@@ -914,19 +1091,21 @@ export class PlayScene extends Phaser.Scene {
       }).setOrigin(0.5).setDepth(21)
     }
 
-    const scoreLine = award.coinMonger
-      ? `${award.baseCoins} COINS + ${award.bonusCoins} BONUS  //  TOTAL ${totalScore}`
-      : `+${award.baseCoins} COINS  //  TOTAL ${totalScore}`
-    this.add.text(
-      GAME_WIDTH / 2,
-      GAME_HEIGHT / 2 + (award.coinMonger ? 50 : 16),
-      scoreLine,
-      {
-        fontFamily: '"Press Start 2P"',
-        fontSize: award.coinMonger ? '12px' : '14px',
-        color: '#ffcf52',
-      },
-    ).setOrigin(0.5).setDepth(21)
+    if (!casual) {
+      const scoreLine = award.coinMonger
+        ? `${award.baseCoins} COINS + ${award.bonusCoins} BONUS  //  TOTAL ${totalScore}`
+        : `+${award.baseCoins} COINS  //  TOTAL ${totalScore}`
+      this.add.text(
+        GAME_WIDTH / 2,
+        GAME_HEIGHT / 2 + (award.coinMonger ? 50 : 16),
+        scoreLine,
+        {
+          fontFamily: '"Press Start 2P"',
+          fontSize: award.coinMonger ? '12px' : '14px',
+          color: '#ffcf52',
+        },
+      ).setOrigin(0.5).setDepth(21)
+    }
 
     this.time.delayedCall(1250, () => {
       this.scene.restart({
@@ -935,6 +1114,7 @@ export class PlayScene extends Phaser.Scene {
         runSeed: this.runSeed,
         lives: this.simulation.lives,
         introducedFeatureIds: [...this.introducedFeatureIds],
+        difficulty: this.difficulty,
       })
     })
   }
@@ -966,7 +1146,7 @@ export class PlayScene extends Phaser.Scene {
     this.add.text(
       GAME_WIDTH / 2,
       GAME_HEIGHT / 2 - 24,
-      `STAGE ${String(this.stageNumber).padStart(2, '0')}  //  ${totalScore} COINS RECOVERED`,
+      `${getDifficultyPreset(this.difficulty).label}  //  STAGE ${String(this.stageNumber).padStart(2, '0')}  //  ${totalScore} COINS`,
       {
         fontFamily: '"Press Start 2P"',
         fontSize: '14px',
@@ -1025,8 +1205,10 @@ export class PlayScene extends Phaser.Scene {
     while (nextRunSeed === this.runSeed) {
       nextRunSeed = createRandomRunSeed()
     }
-    updateRunSeedInUrl(nextRunSeed)
-    this.restartRun(nextRunSeed)
+    this.scene.restart({
+      runSeed: nextRunSeed,
+      selectDifficulty: true,
+    })
   }
 
   private retryCurrentSeed(): void {
@@ -1035,7 +1217,7 @@ export class PlayScene extends Phaser.Scene {
     }
 
     this.runRestarting = true
-    updateRunSeedInUrl(this.runSeed)
+    updateRunConfigurationInUrl(this.runSeed, this.difficulty)
     this.restartRun(this.runSeed)
   }
 
@@ -1051,6 +1233,7 @@ export class PlayScene extends Phaser.Scene {
       runSeed: this.runSeed,
       lives: this.stageEntryLives,
       introducedFeatureIds: [...this.introducedFeatureIds],
+      difficulty: this.difficulty,
     })
   }
 
@@ -1061,6 +1244,7 @@ export class PlayScene extends Phaser.Scene {
       runSeed,
       lives: INITIAL_LIVES,
       introducedFeatureIds: [],
+      difficulty: this.difficulty,
     })
   }
 
@@ -1084,18 +1268,14 @@ function deriveStageSeed(runSeed: number, stageNumber: number): number {
   return Math.imul(runSeed ^ stageNumber, 0x9e3779b1) >>> 0
 }
 
-function createRunSeed(): number {
-  const requestedSeed = parseRunSeed(new URLSearchParams(location.search).get('seed'))
-  return requestedSeed ?? createRandomRunSeed()
-}
-
 function createRandomRunSeed(): number {
   return crypto.getRandomValues(new Uint32Array(1))[0]
 }
 
-function updateRunSeedInUrl(runSeed: number): void {
+function updateRunConfigurationInUrl(runSeed: number, difficulty: DifficultyId): void {
   const url = new URL(location.href)
   url.searchParams.set('seed', runSeed.toString(16).toUpperCase().padStart(8, '0'))
+  url.searchParams.set('difficulty', difficulty)
   history.replaceState(null, '', url)
 }
 

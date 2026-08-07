@@ -13,6 +13,8 @@ Create a production build with `npm run build` and run the deterministic test su
 
 ## Controls
 
+- On the first run or a New Run, `Up` / `Down` or `W` / `S`: choose difficulty
+- On the difficulty selector, `Enter`, `Space`, click, or tap: start the selected mode
 - Arrow keys or `WASD`: queue a direction at the next legal junction
 - `Escape`: pause or return to the game during active gameplay
 - While paused, `T`: retry the current level from its starting state
@@ -24,7 +26,16 @@ Create a production build with `npm run build` and run the deterministic test su
 
 Movement continues until blocked. The hunter remains dormant until the player starts moving, then follows from the entrance after a short delay.
 
-Escape opens a pause menu during active gameplay. While paused, simulation time, movement, hazards, and gameplay animations freeze. `RETURN TO GAME` preserves the exact stage state. `RETRY LEVEL` rebuilds the current level with the same layout, score carried from earlier levels, and lives held when the level began; progress and life changes from the discarded attempt are reset, and dismissed feature briefings do not repeat. `RETRY SEED` starts a clean Stage 1 run with the same seed, while `NEW RUN` starts Stage 1 with a fresh seed and updates the URL. Both run-level actions reset score, lives, stage progress, and feature discoveries. Pause is unavailable during briefings, life-loss interruptions, stage transitions, and game over.
+## Difficulty
+
+- `CASUAL MODE`: All maze, no menace. The walls are the only thing judging you. No coins, baddies, traps, Extra Life, or portals.
+- `EASY PEASY`: Full systems, half speed. Danger has been asked to walk.
+- `NORMAL`: Factory settings. The maze cheats only the approved amount.
+- `OVERCLOCKED`: Everything at 150%. Warranty status: extremely void.
+
+The first run and every `NEW RUN` open the difficulty selector with Normal preselected. Press Enter for the default or deliberately choose another signal. `RETRY LEVEL` and `RETRY SEED` preserve the active difficulty. Easy Peasy and Overclocked scale gameplay movement, enemy release, and hazard timing together; menus and transitions remain at normal speed. Casual Mode keeps only the generated maze, Start, Exit, and player, replacing score and lives with a mode indicator.
+
+Escape opens a pause menu during active gameplay. While paused, simulation time, movement, hazards, and gameplay animations freeze. `RETURN TO GAME` preserves the exact stage state. `RETRY LEVEL` rebuilds the current level with the same layout, score carried from earlier levels, and lives held when the level began; progress and life changes from the discarded attempt are reset, and dismissed feature briefings do not repeat. `RETRY SEED` starts a clean Stage 1 run with the same seed and difficulty, while `NEW RUN` opens the difficulty selector for a fresh seed. Both run-level actions reset score, lives, stage progress, and feature discoveries. Pause is unavailable during briefings, life-loss interruptions, stage transitions, and game over.
 
 Coins are optional, but collecting every coin before reaching the exit earns the `COIN MONGER!` bonus and doubles that stage's coin award. The multiplier applies only when the stage is completed, never doubles score carried from earlier stages, and remains available after losing a reserve life because collected coins stay collected. A game over before the exit receives no bonus. Score saving remains deferred.
 
@@ -36,20 +47,20 @@ Extra-life targets move more slowly than the hunter but prefer routes that incre
 
 Each run starts with one life and can hold at most two. The evasive Extra Life is guaranteed on Stage 2 while one life remains; later replacement opportunities are scarce and random. Catching it grants the single reserve life. Losing that reserve resets the player and hunter, clears the Start return link, and pauses for 1.25 seconds with a message identifying whether the hunter or spikes caused the hit. Collected coins, caught targets, and the current hazard clock are preserved.
 
-Losing the final life opens a persistent run summary with the highest stage reached and total coins recovered. `NEW RUN` generates a fresh seed and updates the URL; `RETRY SEED` restarts Stage 1 with the same generated stage sequence. Both reset lives, score, and feature discoveries. Scores are carried only during the active run; saving, history, and leaderboards are deferred.
+Losing the final life opens a persistent run summary with the highest stage reached and total coins recovered. `NEW RUN` generates a pending fresh seed and opens the difficulty selector; the URL updates when a mode is confirmed. `RETRY SEED` restarts Stage 1 with the same generated stage sequence and difficulty. Both reset lives, score, and feature discoveries. Scores are carried only during the active run; saving, history, and leaderboards are deferred.
 
 Some distant dead ends contain reusable portals. Entering one returns the player to the maze entrance while the hunter, collected coins, hazards, and other stage state continue unchanged. After leaving the entrance, a pulsing amber portal dot appears inside the red Start box; returning to Start then sends the player back to the last portal used. A newer portal replaces that return destination, and losing a life clears both the link and dot. Portals affect the player only.
 
 ## Reproducible runs
 
-Append a decimal or hexadecimal seed to the URL:
+Append a decimal or hexadecimal seed and canonical difficulty to the URL to launch a complete run directly:
 
 ```text
-http://localhost:5173/?seed=4271
-http://localhost:5173/?seed=DEADBEEF
+http://localhost:5173/?seed=4271&difficulty=normal
+http://localhost:5173/?seed=DEADBEEF&difficulty=overclocked
 ```
 
-The same run seed, stage number, and retained-life state reproduce the same maze, portals, coin layout, extra-life target, and spike cycle. Retained lives matter because extra-life targets appear only when the player has at most one life, and occupied cells are excluded from coin and spike placement.
+The same run seed, difficulty, stage number, and retained-life state reproduce the same run. Maze geometry is identical across difficulties; mode controls which gameplay systems are present and how quickly simulation time advances. Retained lives matter because Extra Life targets appear only when the player has at most one life, and occupied cells are excluded from coin and spike placement.
 
 Append `&debug=maze` to highlight escape-loop paths, newly opened passages, and loop coin anchors:
 
@@ -68,6 +79,6 @@ The deterministic game modules do not depend on Phaser. Rendering runs at the br
 
 ## Current slice
 
-Implemented: sparsely braided generated stages, reusable dead-end escape portals, loop-biased coin clusters, continuous buffered movement, optional coins, stage progression, run-scoped feature briefings, one delayed hunter with stable route choices, scarce evasive extra-life targets, telegraphed timed floor spikes, retained-life respawns, a responsive sprite legend, pixel presentation, and reproducible/debug URLs.
+Implemented: four run difficulties, maze-only Casual Mode, scalable gameplay timing, sparsely braided generated stages, reusable dead-end escape portals, loop-biased coin clusters, continuous buffered movement, optional coins, stage progression, run-scoped feature briefings, one delayed hunter with stable route choices, scarce evasive extra-life targets, telegraphed timed floor spikes, retained-life respawns, a responsive sprite legend, pixel presentation, and reproducible/debug URLs.
 
 Next: the ambusher and wanderer, moving blades, controller input, reactive audio, and local leaderboards.

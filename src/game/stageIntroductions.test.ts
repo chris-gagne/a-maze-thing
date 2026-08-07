@@ -21,6 +21,13 @@ describe('selectStageIntroduction', () => {
     ])).toBeNull()
   })
 
+  it('uses maze-only copy for the Casual core briefing', () => {
+    const introduction = selectStageIntroduction(1, [], [], true)
+
+    expect(introduction?.lines[0]).toContain('walls')
+    expect(introduction?.lines[0]).not.toMatch(/coin|hunter/i)
+  })
+
   it('does not announce eligible features that are absent from the stage', () => {
     expect(selectStageIntroduction(2, [], [StageFeature.CoreBriefing])).toBeNull()
   })

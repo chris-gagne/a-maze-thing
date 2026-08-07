@@ -83,6 +83,45 @@ describe('stage simulation', () => {
     expect(simulation.coins.size).toBe(0)
   })
 
+  it('completes a maze with an explicit empty coin set', () => {
+    const maze = generatePerfectMaze(6, 6, 85)
+    const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
+    const exitIndex = toIndex(maze.exit.x, maze.exit.y, maze.width)
+    const route = routeTo(maze, entranceIndex, exitIndex)
+    const simulation = createStageSimulation(maze, { coinIndices: [] })
+
+    for (let index = 1; index < route.length; index += 1) {
+      queuePlayerDirection(simulation, directionBetween(maze, route[index - 1], route[index]))
+      updateStageSimulation(simulation, 1, 1)
+    }
+
+    expect(simulation.coins.size).toBe(0)
+    expect(simulation.collectedCoins).toBe(0)
+    expect(simulation.complete).toBe(true)
+  })
+
+  it.each([
+    ['Easy Peasy', 0.5],
+    ['Normal', 1],
+    ['Overclocked', 1.5],
+  ])('advances %s gameplay time at %sx', (_label, multiplier) => {
+    const maze = generatePerfectMaze(5, 5, 86)
+    const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
+    const exitIndex = toIndex(maze.exit.x, maze.exit.y, maze.width)
+    const route = routeTo(maze, entranceIndex, exitIndex)
+    const simulation = createStageSimulation(maze, {
+      coinIndices: [],
+      hunter: { startCellIndex: entranceIndex, releaseDelaySeconds: 2 },
+    })
+    queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
+
+    updateStageSimulation(simulation, 0.4 * multiplier, 1, 0.1)
+
+    expect(simulation.elapsedSeconds).toBeCloseTo(0.4 * multiplier)
+    expect(simulation.player.progress).toBeCloseTo(0.4 * multiplier)
+    expect(simulation.hunter?.releaseSecondsRemaining).toBeCloseTo(2 - 0.4 * multiplier)
+  })
+
   it('releases the hunter only after the player moves and ends the run on contact', () => {
     const maze = generatePerfectMaze(6, 6, 108)
     const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)

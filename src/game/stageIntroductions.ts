@@ -28,6 +28,7 @@ export function selectStageIntroduction(
   stageNumber: number,
   presentFeatureIds: Iterable<StageFeatureId>,
   introducedFeatureIds: Iterable<StageFeatureId>,
+  casualMode = false,
 ): StageIntroduction | null {
   const introduced = new Set(introducedFeatureIds)
   const present = new Set(presentFeatureIds)
@@ -46,7 +47,13 @@ export function selectStageIntroduction(
 
   return {
     headline: newFeatureIds.includes(StageFeature.CoreBriefing) ? 'RUN BRIEFING' : 'MAZE MUTATION',
-    lines: newFeatureIds.map((featureId) => FEATURE_COPY[featureId]),
+    lines: newFeatureIds.map((featureId) => {
+      return featureId === StageFeature.CoreBriefing && casualMode
+        ? CASUAL_CORE_BRIEFING
+        : FEATURE_COPY[featureId]
+    }),
     introducedFeatureIds: [...introduced, ...newFeatureIds],
   }
 }
+
+const CASUAL_CORE_BRIEFING = 'Find the exit. The walls have agreed to be your only problem.'
