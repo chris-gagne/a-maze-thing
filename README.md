@@ -28,7 +28,7 @@ http://localhost:5173/?seed=4271
 http://localhost:5173/?seed=DEADBEEF
 ```
 
-The same run seed and stage number always produce the same maze, coin layout, and spike cycle.
+The same run seed, stage number, and retained-life state reproduce the same maze, coin layout, extra-life target, and spike cycle. Retained lives matter because extra-life targets appear only when the player has at most one life, and occupied cells are excluded from coin and spike placement.
 
 Append `&debug=maze` to highlight escape-loop paths, newly opened passages, and loop coin anchors:
 

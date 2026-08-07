@@ -92,7 +92,6 @@ export class PlayScene extends Phaser.Scene {
     const dimensions = getStageDimensions(this.stageNumber)
     const stageSeed = deriveStageSeed(this.runSeed, this.stageNumber)
     this.maze = generateMaze(dimensions.width, dimensions.height, stageSeed)
-    const coinPlacement = createCoinPlacement(this.maze, stageSeed ^ 0xc01dcafe)
     const lifeTargetIndex = placeLifeTarget(
       this.maze,
       this.stageNumber,
@@ -106,12 +105,18 @@ export class PlayScene extends Phaser.Scene {
       lifeTargetIndex === null ? [] : [lifeTargetIndex],
     )
     const spikeIndices = new Set(spikePlacement.map((spike) => spike.cellIndex))
+    const occupiedIndices = lifeTargetIndex === null
+      ? spikeIndices
+      : new Set([lifeTargetIndex, ...spikeIndices])
+    const coinPlacement = createCoinPlacement(
+      this.maze,
+      stageSeed ^ 0xc01dcafe,
+      occupiedIndices,
+    )
     this.loopAnchors = coinPlacement.loopAnchors
     const entranceIndex = this.maze.entrance.y * this.maze.width + this.maze.entrance.x
     this.simulation = createStageSimulation(this.maze, {
-      coinIndices: coinPlacement.indices.filter(
-        (index) => index !== lifeTargetIndex && !spikeIndices.has(index),
-      ),
+      coinIndices: coinPlacement.indices,
       hunter: {
         startCellIndex: entranceIndex,
         releaseDelaySeconds: HUNTER_RELEASE_DELAY_SECONDS,

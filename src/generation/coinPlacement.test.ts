@@ -46,6 +46,25 @@ describe('placeCoins', () => {
       expect(coinsNearLoops).toBeGreaterThanOrEqual(Math.min(loopRegion.size, Math.ceil(minimumCoinCount * 0.35)))
     }
   })
+
+  it('preserves density and loop anchors after reserving occupied cells', () => {
+    for (let seed = 0; seed < 100; seed += 1) {
+      const maze = generateMaze(15, 11, seed)
+      const initial = createCoinPlacement(maze, seed ^ 0xc01dcafe)
+      const reserved = initial.indices.slice(0, 4)
+      const placement = createCoinPlacement(maze, seed ^ 0xc01dcafe, reserved)
+      const repeated = createCoinPlacement(maze, seed ^ 0xc01dcafe, reserved)
+      const coins = new Set(placement.indices)
+      const availableCells = maze.cells.length - 2 - new Set(reserved).size
+
+      expect(placement).toEqual(repeated)
+      expect(placement.indices.every((index) => !reserved.includes(index))).toBe(true)
+      expect(placement.indices.length).toBeGreaterThanOrEqual(Math.ceil(availableCells * 0.52))
+      expect(placement.indices.length).toBeLessThanOrEqual(Math.floor(availableCells * 0.78))
+      expect(placement.loopAnchors.length).toBe(maze.braids.length)
+      expect(placement.loopAnchors.every((index) => coins.has(index))).toBe(true)
+    }
+  })
 })
 
 function getLoopRegion(maze: ReturnType<typeof generateMaze>): Set<number> {

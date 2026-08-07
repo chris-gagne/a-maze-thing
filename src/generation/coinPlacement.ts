@@ -10,21 +10,30 @@ export interface CoinPlacement {
   loopAnchors: number[]
 }
 
-export function placeCoins(maze: Maze, seed: number): number[] {
-  return createCoinPlacement(maze, seed).indices
+export function placeCoins(
+  maze: Maze,
+  seed: number,
+  reservedIndices: Iterable<number> = [],
+): number[] {
+  return createCoinPlacement(maze, seed, reservedIndices).indices
 }
 
-export function createCoinPlacement(maze: Maze, seed: number): CoinPlacement {
+export function createCoinPlacement(
+  maze: Maze,
+  seed: number,
+  reservedIndices: Iterable<number> = [],
+): CoinPlacement {
   const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
   const exitIndex = toIndex(maze.exit.x, maze.exit.y, maze.width)
+  const reserved = new Set([entranceIndex, exitIndex, ...reservedIndices])
   const candidates = maze.cells
     .map((_, index) => index)
-    .filter((index) => index !== entranceIndex && index !== exitIndex)
+    .filter((index) => !reserved.has(index))
   const minimumCoins = Math.ceil(candidates.length * MINIMUM_DENSITY)
   const maximumCoins = Math.max(minimumCoins, Math.floor(candidates.length * MAXIMUM_DENSITY))
   const random = createSeededRandom(seed)
   const coins = new Set<number>()
-  const loopAnchors = selectLoopAnchors(maze, random, entranceIndex, exitIndex)
+  const loopAnchors = selectLoopAnchors(maze, random, reserved)
   const loopCoinTarget = Math.min(
     maximumCoins,
     Math.ceil(minimumCoins * LOOP_COIN_SHARE),
@@ -36,8 +45,7 @@ export function createCoinPlacement(maze: Maze, seed: number): CoinPlacement {
     coins,
     loopCoinTarget,
     random,
-    entranceIndex,
-    exitIndex,
+    reserved,
   )
 
   const clusterCount = Math.max(2, Math.ceil(candidates.length / 22))
@@ -48,7 +56,7 @@ export function createCoinPlacement(maze: Maze, seed: number): CoinPlacement {
     const trailLength = 7 + Math.floor(random() * 9)
 
     for (let step = 0; step < trailLength && coins.size < maximumCoins; step += 1) {
-      if (currentIndex !== entranceIndex && currentIndex !== exitIndex) {
+      if (!reserved.has(currentIndex)) {
         coins.add(currentIndex)
       }
       const openNeighbors = getOpenNeighborIndices(maze, currentIndex)
@@ -72,7 +80,7 @@ export function createCoinPlacement(maze: Maze, seed: number): CoinPlacement {
     }
   }
 
-  const shuffledCandidates = [...candidates].sort(() => random() - 0.5)
+  const shuffledCandidates = shuffle([...candidates], random)
   for (const candidate of shuffledCandidates) {
     if (coins.size >= minimumCoins) {
       break
@@ -89,19 +97,20 @@ export function createCoinPlacement(maze: Maze, seed: number): CoinPlacement {
 function selectLoopAnchors(
   maze: Maze,
   random: () => number,
-  entranceIndex: number,
-  exitIndex: number,
+  reserved: ReadonlySet<number>,
 ): number[] {
   return maze.braids.flatMap((braid) => {
     const minimumPosition = Math.floor(braid.pathIndices.length / 3)
     const maximumPosition = Math.max(minimumPosition, Math.ceil(braid.pathIndices.length * 2 / 3) - 1)
-    const positions = Array.from(
+    const middlePositions = Array.from(
       { length: maximumPosition - minimumPosition + 1 },
       (_, offset) => minimumPosition + offset,
-    ).filter((position) => {
-      const index = braid.pathIndices[position]
-      return index !== entranceIndex && index !== exitIndex
-    })
+    ).filter((position) => !reserved.has(braid.pathIndices[position]))
+    const positions = middlePositions.length > 0
+      ? middlePositions
+      : braid.pathIndices
+          .map((_, position) => position)
+          .filter((position) => !reserved.has(braid.pathIndices[position]))
 
     if (positions.length === 0) {
       return []
@@ -118,8 +127,7 @@ function placeLoopCoins(
   coins: Set<number>,
   targetCount: number,
   random: () => number,
-  entranceIndex: number,
-  exitIndex: number,
+  reserved: ReadonlySet<number>,
 ): void {
   if (anchors.length === 0 || targetCount === 0) {
     return
@@ -131,7 +139,7 @@ function placeLoopCoins(
   for (let cursor = 0; cursor < pending.length && coins.size < targetCount; cursor += 1) {
     const currentIndex = pending[cursor]
 
-    if (currentIndex !== entranceIndex && currentIndex !== exitIndex) {
+    if (!reserved.has(currentIndex)) {
       coins.add(currentIndex)
     }
 
