@@ -1,0 +1,21 @@
+import { DamageSource, type DamageSource as DamageSourceValue } from '../game/lifeRules'
+
+export interface LifeMessage {
+  cause: string
+  finalCause: string
+}
+
+const LIFE_MESSAGES: Readonly<Record<DamageSourceValue, LifeMessage>> = {
+  [DamageSource.Hunter]: {
+    cause: 'THE HUNTER CLOSED THE GAP.',
+    finalCause: 'THE HUNTER ENDED THE RUN.',
+  },
+  [DamageSource.Spike]: {
+    cause: 'THE FLOOR BIT BACK.',
+    finalCause: 'THE MAZE CLAIMED ITS LAST LIFE.',
+  },
+}
+
+export function getLifeMessage(source: DamageSourceValue): LifeMessage {
+  return LIFE_MESSAGES[source]
+}

@@ -10,6 +10,7 @@ import {
   updateStageSimulation,
 } from '../game/stageSimulation'
 import { parseRunSeed } from '../game/runSeed'
+import { INITIAL_LIVES } from '../game/lifeRules'
 import { getSpikePhase, SpikePhase } from '../game/spikeTiming'
 import {
   selectStageIntroduction,
@@ -23,6 +24,7 @@ import { generateMaze, type Maze, Wall } from '../generation/maze'
 import { placePortals } from '../generation/portalPlacement'
 import { placeSpikes } from '../generation/spikePlacement'
 import { createPixelTextures, TextureKey } from '../presentation/pixelTextures'
+import { getLifeMessage } from '../presentation/lifeMessages'
 
 export const GAME_WIDTH = 960
 export const GAME_HEIGHT = 720
@@ -34,6 +36,7 @@ const PLAYER_SPEED = 5
 const HUNTER_SPEED = 3.25
 const HUNTER_RELEASE_DELAY_SECONDS = 2.4
 const LIFE_TARGET_SPEED = 3.8
+const RESPAWN_PAUSE_MILLISECONDS = 1250
 
 interface RunSceneData {
   stageNumber: number
@@ -57,8 +60,11 @@ export class PlayScene extends Phaser.Scene {
   private lives = 1
   private accumulator = 0
   private stageResolved = false
+  private runEndActive = false
+  private runRestarting = false
   private introducedFeatureIds = new Set<StageFeatureId>()
   private stageIntroduction: Phaser.GameObjects.Container | null = null
+  private respawnOverlay: Phaser.GameObjects.Container | null = null
   private observedPortalReturnArmed = false
   private maze!: Maze
   private simulation!: StageSimulation
@@ -74,6 +80,7 @@ export class PlayScene extends Phaser.Scene {
   private movementKeys!: MovementKeys
   private introductionEnterKey!: Phaser.Input.Keyboard.Key
   private introductionSpaceKey!: Phaser.Input.Keyboard.Key
+  private retrySeedKey!: Phaser.Input.Keyboard.Key
   private coinSprites = new Map<number, Phaser.GameObjects.Image>()
   private spikeSprites = new Map<number, Phaser.GameObjects.Image>()
   private loopAnchors: number[] = []
@@ -89,11 +96,14 @@ export class PlayScene extends Phaser.Scene {
     this.stageNumber = data.stageNumber ?? 1
     this.carriedScore = data.carriedScore ?? 0
     this.runSeed = data.runSeed ?? createRunSeed()
-    this.lives = data.lives ?? 1
+    this.lives = data.lives ?? INITIAL_LIVES
     this.introducedFeatureIds = new Set(data.introducedFeatureIds ?? [])
     this.accumulator = 0
     this.stageResolved = false
+    this.runEndActive = false
+    this.runRestarting = false
     this.stageIntroduction = null
+    this.respawnOverlay = null
     this.observedPortalReturnArmed = false
     this.coinSprites.clear()
     this.spikeSprites.clear()
@@ -174,7 +184,20 @@ export class PlayScene extends Phaser.Scene {
   }
 
   update(_time: number, deltaMilliseconds: number): void {
+    if (this.runEndActive) {
+      if (Phaser.Input.Keyboard.JustDown(this.introductionEnterKey)) {
+        this.startNewRun()
+      } else if (Phaser.Input.Keyboard.JustDown(this.retrySeedKey)) {
+        this.retryCurrentSeed()
+      }
+      return
+    }
+
     if (this.stageResolved) {
+      return
+    }
+
+    if (this.respawnOverlay !== null) {
       return
     }
 
@@ -192,6 +215,7 @@ export class PlayScene extends Phaser.Scene {
     this.accumulator += Math.min(deltaMilliseconds / 1000, 0.1)
 
     while (this.accumulator >= FIXED_STEP_SECONDS) {
+      const livesLostBeforeUpdate = this.simulation.livesLost
       updateStageSimulation(
         this.simulation,
         FIXED_STEP_SECONDS,
@@ -200,6 +224,11 @@ export class PlayScene extends Phaser.Scene {
         LIFE_TARGET_SPEED,
       )
       this.accumulator -= FIXED_STEP_SECONDS
+
+      if (this.simulation.livesLost > livesLostBeforeUpdate) {
+        this.accumulator = 0
+        break
+      }
     }
 
     this.syncPresentation()
@@ -459,6 +488,7 @@ export class PlayScene extends Phaser.Scene {
     }) as MovementKeys
     this.introductionEnterKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER)
     this.introductionSpaceKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)
+    this.retrySeedKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R)
   }
 
   private showStageIntroduction(introduction: StageIntroduction): void {
@@ -586,11 +616,51 @@ export class PlayScene extends Phaser.Scene {
       this.showStatusMessage('EXTRA LIFE', '#79f25f')
     }
 
-    if (this.simulation.livesLost > this.observedLivesLost && !this.simulation.gameOver) {
+    if (this.simulation.livesLost > this.observedLivesLost) {
       this.observedLivesLost = this.simulation.livesLost
-      this.showStatusMessage('LIFE LOST', '#ff5364')
-      this.cameras.main.flash(180, 255, 83, 100, false)
+
+      if (!this.simulation.gameOver) {
+        this.showRespawnOverlay()
+        this.cameras.main.flash(180, 255, 83, 100, false)
+      }
     }
+  }
+
+  private showRespawnOverlay(): void {
+    const source = this.simulation.lastDamageSource
+    if (source === null) {
+      throw new Error('A lost life must record its damage source.')
+    }
+
+    const panel = this.add.rectangle(0, 0, 560, 210, 0x05080a, 0.97)
+    panel.setStrokeStyle(4, 0xff5364, 1)
+    const headline = this.add.text(0, -62, 'LIFE LOST', {
+      fontFamily: '"Press Start 2P"',
+      fontSize: '28px',
+      color: '#ff5364',
+    }).setOrigin(0.5)
+    const cause = this.add.text(0, 0, getLifeMessage(source).cause, {
+      fontFamily: '"Press Start 2P"',
+      fontSize: '14px',
+      color: '#f3fffe',
+    }).setOrigin(0.5)
+    const remaining = this.add.text(0, 58, '1 LIFE REMAINS', {
+      fontFamily: '"Press Start 2P"',
+      fontSize: '14px',
+      color: '#ffcf52',
+    }).setOrigin(0.5)
+
+    this.respawnOverlay = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2, [
+      panel,
+      headline,
+      cause,
+      remaining,
+    ]).setDepth(25)
+    this.time.delayedCall(RESPAWN_PAUSE_MILLISECONDS, () => {
+      this.respawnOverlay?.destroy(true)
+      this.respawnOverlay = null
+      this.accumulator = 0
+    })
   }
 
   private syncPortalEvents(): void {
@@ -709,25 +779,112 @@ export class PlayScene extends Phaser.Scene {
 
   private resolveRun(): void {
     this.stageResolved = true
+    this.runEndActive = true
     const totalScore = this.carriedScore + this.simulation.collectedCoins
+    const source = this.simulation.lastDamageSource
+    if (source === null) {
+      throw new Error('Game over must record its damage source.')
+    }
     this.playerSprite.setTint(0xff5364)
 
-    const panel = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 520, 188, 0x05080a, 0.96)
+    const panel = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 680, 390, 0x05080a, 0.97)
     panel.setStrokeStyle(4, 0xff5364, 1)
     panel.setDepth(20)
 
-    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 52, 'SIGNAL LOST', {
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 142, 'SIGNAL LOST', {
       fontFamily: '"Press Start 2P"',
       fontSize: '28px',
       color: '#ff5364',
     }).setOrigin(0.5).setDepth(21)
-    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 16, `${totalScore} COINS RECOVERED`, {
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 82, getLifeMessage(source).finalCause, {
       fontFamily: '"Press Start 2P"',
       fontSize: '14px',
-      color: '#ffcf52',
+      color: '#f3fffe',
     }).setOrigin(0.5).setDepth(21)
+    this.add.text(
+      GAME_WIDTH / 2,
+      GAME_HEIGHT / 2 - 24,
+      `STAGE ${String(this.stageNumber).padStart(2, '0')}  //  ${totalScore} COINS RECOVERED`,
+      {
+        fontFamily: '"Press Start 2P"',
+        fontSize: '14px',
+        color: '#ffcf52',
+      },
+    ).setOrigin(0.5).setDepth(21)
 
-    this.time.delayedCall(1800, () => this.scene.restart())
+    this.createRunActionButton(
+      GAME_WIDTH / 2 - 138,
+      GAME_HEIGHT / 2 + 74,
+      'NEW RUN [ENTER]',
+      0x79f25f,
+      () => this.startNewRun(),
+    )
+    this.createRunActionButton(
+      GAME_WIDTH / 2 + 138,
+      GAME_HEIGHT / 2 + 74,
+      'RETRY SEED [R]',
+      0x42e8df,
+      () => this.retryCurrentSeed(),
+    )
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 146, 'SCORES ARE NOT SAVED YET', {
+      fontFamily: '"Press Start 2P"',
+      fontSize: '11px',
+      color: '#8ba5aa',
+    }).setOrigin(0.5).setDepth(21)
+  }
+
+  private createRunActionButton(
+    x: number,
+    y: number,
+    label: string,
+    color: number,
+    activate: () => void,
+  ): void {
+    const background = this.add.rectangle(x, y, 244, 58, 0x071318, 1)
+    background.setStrokeStyle(3, color, 1).setDepth(21).setInteractive({ useHandCursor: true })
+    this.add.text(x, y, label, {
+      fontFamily: '"Press Start 2P"',
+      fontSize: '12px',
+      color: '#ffcf52',
+    }).setOrigin(0.5).setDepth(22)
+
+    background.on('pointerover', () => background.setFillStyle(color, 0.22))
+    background.on('pointerout', () => background.setFillStyle(0x071318, 1))
+    background.on('pointerdown', activate)
+  }
+
+  private startNewRun(): void {
+    if (this.runRestarting) {
+      return
+    }
+
+    this.runRestarting = true
+    let nextRunSeed = createRandomRunSeed()
+    while (nextRunSeed === this.runSeed) {
+      nextRunSeed = createRandomRunSeed()
+    }
+    updateRunSeedInUrl(nextRunSeed)
+    this.restartRun(nextRunSeed)
+  }
+
+  private retryCurrentSeed(): void {
+    if (this.runRestarting) {
+      return
+    }
+
+    this.runRestarting = true
+    updateRunSeedInUrl(this.runSeed)
+    this.restartRun(this.runSeed)
+  }
+
+  private restartRun(runSeed: number): void {
+    this.scene.restart({
+      stageNumber: 1,
+      carriedScore: 0,
+      runSeed,
+      lives: INITIAL_LIVES,
+      introducedFeatureIds: [],
+    })
   }
 
   private cellCenterX(gridX: number): number {
@@ -752,7 +909,17 @@ function deriveStageSeed(runSeed: number, stageNumber: number): number {
 
 function createRunSeed(): number {
   const requestedSeed = parseRunSeed(new URLSearchParams(location.search).get('seed'))
-  return requestedSeed ?? crypto.getRandomValues(new Uint32Array(1))[0]
+  return requestedSeed ?? createRandomRunSeed()
+}
+
+function createRandomRunSeed(): number {
+  return crypto.getRandomValues(new Uint32Array(1))[0]
+}
+
+function updateRunSeedInUrl(runSeed: number): void {
+  const url = new URL(location.href)
+  url.searchParams.set('seed', runSeed.toString(16).toUpperCase().padStart(8, '0'))
+  history.replaceState(null, '', url)
 }
 
 function isMazeDebugEnabled(): boolean {

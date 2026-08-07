@@ -3,13 +3,22 @@ import { generateMaze, toIndex } from './maze'
 import { placeLifeTarget } from './lifeTargetPlacement'
 
 describe('placeLifeTarget', () => {
-  it('never spawns on the first stage or while multiple lives remain', () => {
+  it('spawns only after the first stage and with exactly one life', () => {
     const maze = generateMaze(11, 7, 41)
     expect(placeLifeTarget(maze, 1, 1, 7)).toBeNull()
     expect(placeLifeTarget(maze, 8, 2, 7)).toBeNull()
+    expect(placeLifeTarget(maze, 8, 0, 7)).toBeNull()
   })
 
-  it('is deterministic, scarce, and keeps spawns away from the entrance', () => {
+  it('guarantees a target on stage two while one life remains', () => {
+    const maze = generateMaze(11, 7, 42)
+
+    for (let seed = 0; seed < 100; seed += 1) {
+      expect(placeLifeTarget(maze, 2, 1, seed)).not.toBeNull()
+    }
+  })
+
+  it('is deterministic, scarce after stage two, and keeps spawns away from the entrance', () => {
     const maze = generateMaze(11, 7, 812)
     const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
     let spawnCount = 0

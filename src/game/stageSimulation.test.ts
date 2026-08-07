@@ -19,8 +19,18 @@ import {
   SpikePhase,
   updateStageSimulation,
 } from './stageSimulation'
+import { DamageSource, INITIAL_LIVES, MAX_LIVES } from './lifeRules'
 
 describe('stage simulation', () => {
+  it('starts with one life and rejects values outside the one-to-two range', () => {
+    const maze = generatePerfectMaze(5, 5, 10)
+
+    expect(createStageSimulation(maze).lives).toBe(INITIAL_LIVES)
+    expect(createStageSimulation(maze, { lives: MAX_LIVES }).lives).toBe(MAX_LIVES)
+    expect(() => createStageSimulation(maze, { lives: 0 })).toThrow(RangeError)
+    expect(() => createStageSimulation(maze, { lives: 3 })).toThrow(RangeError)
+  })
+
   it('does not move through a wall', () => {
     const maze = generatePerfectMaze(5, 5, 12)
     const simulation = createStageSimulation(maze)
@@ -291,6 +301,21 @@ describe('stage simulation', () => {
     expect(getLifeTargetGridPosition(simulation)).toBeNull()
   })
 
+  it('never grants more than two lives', () => {
+    const maze = createThreeCellLine()
+    const simulation = createStageSimulation(maze, {
+      lifeTarget: { startCellIndex: 1 },
+      lives: MAX_LIVES,
+    })
+
+    simulation.player.cellIndex = 1
+    updateStageSimulation(simulation, 0.1, 0)
+
+    expect(simulation.lives).toBe(MAX_LIVES)
+    expect(simulation.livesGained).toBe(0)
+    expect(simulation.lifeTarget?.collected).toBe(true)
+  })
+
   it('moves the extra-life target down the route that increases player distance', () => {
     const maze = createThreeCellLine()
     const simulation = createStageSimulation(maze, {
@@ -388,7 +413,26 @@ describe('stage simulation', () => {
 
     expect(simulation.lives).toBe(0)
     expect(simulation.livesLost).toBe(1)
+    expect(simulation.lastDamageSource).toBe(DamageSource.Spike)
     expect(simulation.gameOver).toBe(true)
+  })
+
+  it('records hunter damage once when hunter and spike overlap', () => {
+    const maze = createThreeCellLine()
+    const simulation = createStageSimulation(maze, {
+      hunter: { startCellIndex: 1, releaseDelaySeconds: 0 },
+      spikes: [{ cellIndex: 1, phaseOffsetSeconds: 2 }],
+      lives: MAX_LIVES,
+    })
+    simulation.player.cellIndex = 1
+    simulation.hunter!.active = true
+    simulation.hunter!.releaseStarted = true
+
+    updateStageSimulation(simulation, 0.1, 0, 0)
+
+    expect(simulation.lives).toBe(1)
+    expect(simulation.livesLost).toBe(1)
+    expect(simulation.lastDamageSource).toBe(DamageSource.Hunter)
   })
 
   it('reuses a portal to return only the player to the entrance', () => {

@@ -1,4 +1,5 @@
 import { getOpenNeighborIndices, type Maze, toIndex } from './maze'
+import { INITIAL_LIVES } from '../game/lifeRules'
 import { createSeededRandom } from './random'
 
 const SPAWN_CHANCE = 0.22
@@ -10,12 +11,12 @@ export function placeLifeTarget(
   seed: number,
   reservedIndices: Iterable<number> = [],
 ): number | null {
-  if (stageNumber < 2 || lives > 1) {
+  if (stageNumber < 2 || lives !== INITIAL_LIVES) {
     return null
   }
 
   const random = createSeededRandom(seed)
-  if (random() >= SPAWN_CHANCE) {
+  if (stageNumber > 2 && random() >= SPAWN_CHANCE) {
     return null
   }
 

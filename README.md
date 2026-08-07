@@ -15,6 +15,8 @@ Create a production build with `npm run build` and run the deterministic test su
 
 - Arrow keys or `WASD`: queue a direction at the next legal junction
 - `Enter`, `Space`, click, or tap: dismiss a stage briefing
+- On game over, `Enter`: start a new run with a fresh seed
+- On game over, `R`: retry the same seed from Stage 1
 
 Movement continues until blocked. The hunter remains dormant until the player starts moving, then follows from the entrance after a short delay.
 
@@ -23,6 +25,10 @@ A fresh run opens with a short maze briefing. Later stages pause for one combine
 Floor spikes damage the player only while active. They never damage hostile enemies, but active spikes block new hunter routes; inactive, warning, and recovery phases remain traversable. Future ambusher and wanderer enemies will use the same blocker-aware navigation.
 
 Extra-life targets prefer routes that increase their distance from the player. At a dead end or local maximum, they commit to a route toward a less-visited region of the maze instead of bouncing between the same cells.
+
+Each run starts with one life and can hold at most two. The evasive Extra Life is guaranteed on Stage 2 while one life remains; later replacement opportunities are scarce and random. Catching it grants the single reserve life. Losing that reserve resets the player and hunter, clears the Start return link, and pauses for 1.25 seconds with a message identifying whether the hunter or spikes caused the hit. Collected coins, caught targets, and the current hazard clock are preserved.
+
+Losing the final life opens a persistent run summary with the highest stage reached and total coins recovered. `NEW RUN` generates a fresh seed and updates the URL; `RETRY SEED` restarts Stage 1 with the same generated stage sequence. Both reset lives, score, and feature discoveries. Scores are carried only during the active run; saving, history, and leaderboards are deferred.
 
 Some distant dead ends contain reusable portals. Entering one returns the player to the maze entrance while the hunter, collected coins, hazards, and other stage state continue unchanged. After leaving the entrance, a pulsing amber portal dot appears inside the red Start box; returning to Start then sends the player back to the last portal used. A newer portal replaces that return destination, and losing a life clears both the link and dot. Portals affect the player only.
 

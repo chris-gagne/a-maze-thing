@@ -1,5 +1,6 @@
 import { type GridPoint, type Maze, toIndex, Wall } from '../generation/maze'
 import { findNextEnemyCellTowardIndex } from './enemyNavigation'
+import { DamageSource, INITIAL_LIVES, MAX_LIVES, type DamageSource as DamageSourceValue } from './lifeRules'
 import { getSpikePhase, type SpikeState, SpikePhase } from './spikeTiming'
 
 export { getSpikePhase, SpikePhase } from './spikeTiming'
@@ -59,6 +60,7 @@ export interface StageSimulation {
   lives: number
   livesLost: number
   livesGained: number
+  lastDamageSource: DamageSourceValue | null
   complete: boolean
   gameOver: boolean
 }
@@ -115,10 +117,10 @@ export function createStageSimulation(
   const portals = new Set(options.portalIndices ?? [])
   portals.delete(entranceIndex)
   portals.delete(exitIndex)
-  const lives = options.lives ?? 1
+  const lives = options.lives ?? INITIAL_LIVES
 
-  if (!Number.isInteger(lives) || lives < 1) {
-    throw new RangeError('Lives must be a positive integer.')
+  if (!Number.isInteger(lives) || lives < INITIAL_LIVES || lives > MAX_LIVES) {
+    throw new RangeError(`Lives must be an integer from ${INITIAL_LIVES} to ${MAX_LIVES}.`)
   }
 
   return {
@@ -164,6 +166,7 @@ export function createStageSimulation(
     lives,
     livesLost: 0,
     livesGained: 0,
+    lastDamageSource: null,
     complete: false,
     gameOver: false,
   }
@@ -199,9 +202,9 @@ export function updateStageSimulation(
   collectLifeTargetIfCaught(simulation)
 
   if (simulation.hunter?.active && entitiesOverlap(simulation)) {
-    loseLife(simulation)
+    loseLife(simulation, DamageSource.Hunter)
   } else if (isPlayerOnActiveSpike(simulation)) {
-    loseLife(simulation)
+    loseLife(simulation, DamageSource.Spike)
   }
 }
 
@@ -691,14 +694,17 @@ function collectLifeTargetIfCaught(simulation: StageSimulation): void {
   const playerPosition = getPlayerGridPosition(simulation)
   if (Math.hypot(playerPosition.x - lifeTargetPosition.x, playerPosition.y - lifeTargetPosition.y) <= 0.32) {
     simulation.lifeTarget!.collected = true
-    simulation.lives += 1
-    simulation.livesGained += 1
+    if (simulation.lives < MAX_LIVES) {
+      simulation.lives += 1
+      simulation.livesGained += 1
+    }
   }
 }
 
-function loseLife(simulation: StageSimulation): void {
+function loseLife(simulation: StageSimulation, source: DamageSourceValue): void {
   simulation.lives -= 1
   simulation.livesLost += 1
+  simulation.lastDamageSource = source
   simulation.lastUsedPortalCellIndex = null
   simulation.portalReturnArmed = false
 
