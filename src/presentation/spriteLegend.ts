@@ -28,7 +28,7 @@ export const LEGEND_ENTRIES: readonly LegendEntry[] = [
     spikePhases: true,
   },
   { name: 'Portal', rule: 'Links Start to your last-used portal.', textureKey: TextureKey.Portal },
-  { name: 'Start', rule: 'Spawn point and portal destination.', textureKey: null },
+  { name: 'Start', rule: 'A pulsing portal dot returns to your last portal.', textureKey: null },
 ]
 
 export const LEGEND_TEXTURE_KEYS: readonly TextureKeyValue[] = LEGEND_ENTRIES.flatMap(

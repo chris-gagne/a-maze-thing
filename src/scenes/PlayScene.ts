@@ -59,12 +59,14 @@ export class PlayScene extends Phaser.Scene {
   private stageResolved = false
   private introducedFeatureIds = new Set<StageFeatureId>()
   private stageIntroduction: Phaser.GameObjects.Container | null = null
+  private observedPortalReturnArmed = false
   private maze!: Maze
   private simulation!: StageSimulation
   private mazeOrigin = { x: 0, y: MAZE_TOP }
   private hunterSprite!: Phaser.GameObjects.Image
   private lifeTargetSprite: Phaser.GameObjects.Image | null = null
   private playerSprite!: Phaser.GameObjects.Image
+  private startMarker!: Phaser.GameObjects.Graphics
   private livesText!: Phaser.GameObjects.Text
   private scoreText!: Phaser.GameObjects.Text
   private remainingText!: Phaser.GameObjects.Text
@@ -92,6 +94,7 @@ export class PlayScene extends Phaser.Scene {
     this.accumulator = 0
     this.stageResolved = false
     this.stageIntroduction = null
+    this.observedPortalReturnArmed = false
     this.coinSprites.clear()
     this.spikeSprites.clear()
     this.loopAnchors = []
@@ -202,6 +205,7 @@ export class PlayScene extends Phaser.Scene {
     this.syncPresentation()
     this.syncLifeEvents()
     this.syncPortalEvents()
+    this.syncStartReturnMarker()
 
     if (this.simulation.complete) {
       this.resolveStage()
@@ -253,8 +257,8 @@ export class PlayScene extends Phaser.Scene {
 
     const entranceX = this.cellCenterX(this.maze.entrance.x)
     const entranceY = this.cellCenterY(this.maze.entrance.y)
-    floor.lineStyle(2, 0xff5364, 0.9)
-    floor.strokeRect(entranceX - 15, entranceY - 15, 30, 30)
+    this.startMarker = this.add.graphics({ x: entranceX, y: entranceY }).setDepth(1)
+    this.drawStartMarker(false)
 
     const walls = this.add.graphics()
     this.strokeMazeWalls(walls, 10, 0x0c4b55, 0.55)
@@ -604,6 +608,42 @@ export class PlayScene extends Phaser.Scene {
       ease: 'Stepped',
       easeParams: [3],
     })
+  }
+
+  private syncStartReturnMarker(): void {
+    if (this.simulation.portalReturnArmed === this.observedPortalReturnArmed) {
+      return
+    }
+
+    this.observedPortalReturnArmed = this.simulation.portalReturnArmed
+    this.tweens.killTweensOf(this.startMarker)
+    this.startMarker.setAlpha(1)
+    this.drawStartMarker(this.observedPortalReturnArmed)
+
+    if (this.observedPortalReturnArmed) {
+      this.tweens.add({
+        targets: this.startMarker,
+        alpha: { from: 0.55, to: 1 },
+        duration: 460,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Stepped',
+        easeParams: [3],
+      })
+    }
+  }
+
+  private drawStartMarker(active: boolean): void {
+    this.startMarker.clear()
+    this.startMarker.lineStyle(2, 0xff5364, 0.9)
+    this.startMarker.strokeRect(-15, -15, 30, 30)
+
+    if (!active) {
+      return
+    }
+
+    this.startMarker.fillStyle(0xffb629, 1)
+    this.startMarker.fillRect(-4, -4, 8, 8)
   }
 
   private showStatusMessage(message: string, color: string): void {

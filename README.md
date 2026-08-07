@@ -24,7 +24,7 @@ Floor spikes damage the player only while active. They never damage hostile enem
 
 Extra-life targets prefer routes that increase their distance from the player. At a dead end or local maximum, they commit to a route toward a less-visited region of the maze instead of bouncing between the same cells.
 
-Some distant dead ends contain reusable portals. Entering one returns the player to the maze entrance while the hunter, collected coins, hazards, and other stage state continue unchanged. After leaving the entrance, returning to it sends the player back to the last portal used. A newer portal replaces that return destination, and losing a life clears the link. Portals affect the player only.
+Some distant dead ends contain reusable portals. Entering one returns the player to the maze entrance while the hunter, collected coins, hazards, and other stage state continue unchanged. After leaving the entrance, a pulsing amber portal dot appears inside the red Start box; returning to Start then sends the player back to the last portal used. A newer portal replaces that return destination, and losing a life clears both the link and dot. Portals affect the player only.
 
 ## Reproducible runs
 
