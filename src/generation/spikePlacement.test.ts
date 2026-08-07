@@ -66,4 +66,22 @@ describe('placeSpikes', () => {
       expect(placement.loopAnchors.every((index) => coins.has(index))).toBe(true)
     }
   })
+
+  it('applies bounded post-cap density profiles deterministically', () => {
+    const maze = generateMaze(41, 37, 4271)
+
+    expect(placeSpikes(maze, 51, 9, [], 0.75)).toHaveLength(3)
+    expect(placeSpikes(maze, 52, 9, [], 1)).toHaveLength(4)
+    expect(placeSpikes(maze, 53, 9, [], 1.25)).toHaveLength(5)
+    expect(placeSpikes(maze, 53, 9, [], 1.25))
+      .toEqual(placeSpikes(maze, 53, 9, [], 1.25))
+  })
+
+  it.each([0.49, 1.51, Number.NaN, Number.POSITIVE_INFINITY])(
+    'rejects invalid density multiplier %s',
+    (multiplier) => {
+      const maze = generateMaze(11, 7, 20)
+      expect(() => placeSpikes(maze, 8, 400, [], multiplier)).toThrow(RangeError)
+    },
+  )
 })

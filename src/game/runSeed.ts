@@ -21,3 +21,14 @@ export function parseRunSeed(value: string | null): number | null {
     ? parsed >>> 0
     : null
 }
+
+export function parseDebugStage(value: string | null, mazeDebugEnabled: boolean): number | null {
+  const normalized = value?.trim()
+
+  if (!mazeDebugEnabled || normalized === undefined || !/^\d+$/.test(normalized)) {
+    return null
+  }
+
+  const parsed = Number.parseInt(normalized, 10)
+  return Number.isSafeInteger(parsed) && parsed >= 1 ? parsed : null
+}

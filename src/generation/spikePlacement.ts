@@ -7,7 +7,12 @@ export function placeSpikes(
   stageNumber: number,
   seed: number,
   reservedIndices: Iterable<number> = [],
+  densityMultiplier = 1,
 ): SpikeState[] {
+  if (!Number.isFinite(densityMultiplier) || densityMultiplier < 0.5 || densityMultiplier > 1.5) {
+    throw new RangeError('Spike density multiplier must be between 0.5 and 1.5.')
+  }
+
   if (stageNumber < 2) {
     return []
   }
@@ -29,7 +34,8 @@ export function placeSpikes(
       }),
     random,
   )
-  const targetCount = Math.min(1 + Math.floor((stageNumber - 2) / 3), 4)
+  const baselineCount = Math.min(1 + Math.floor((stageNumber - 2) / 3), 4)
+  const targetCount = Math.max(1, Math.min(6, Math.round(baselineCount * densityMultiplier)))
   const selected: number[] = []
 
   for (const candidate of candidates) {

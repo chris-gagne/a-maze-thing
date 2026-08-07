@@ -9,7 +9,7 @@ import {
   type StageSimulation,
   updateStageSimulation,
 } from '../game/stageSimulation'
-import { parseRunSeed } from '../game/runSeed'
+import { parseDebugStage, parseRunSeed } from '../game/runSeed'
 import { INITIAL_LIVES } from '../game/lifeRules'
 import {
   DEFAULT_DIFFICULTY,
@@ -20,6 +20,7 @@ import {
 } from '../game/difficultySettings'
 import { calculateStageCoinAward } from '../game/stageScoring'
 import { getSpikePhase, SpikePhase } from '../game/spikeTiming'
+import { getStageProfile } from '../game/stageProgression'
 import {
   selectStageIntroduction,
   StageFeature,
@@ -120,7 +121,11 @@ export class PlayScene extends Phaser.Scene {
     const searchParams = new URLSearchParams(location.search)
     const requestedSeed = parseRunSeed(searchParams.get('seed'))
     const requestedDifficulty = parseDifficulty(searchParams.get('difficulty'))
-    this.stageNumber = data.stageNumber ?? 1
+    const requestedStage = parseDebugStage(
+      searchParams.get('stage'),
+      searchParams.get('debug') === 'maze',
+    )
+    this.stageNumber = data.stageNumber ?? requestedStage ?? 1
     this.carriedScore = data.carriedScore ?? 0
     this.runSeed = data.runSeed ?? requestedSeed ?? createRandomRunSeed()
     this.lives = data.lives ?? INITIAL_LIVES
@@ -162,10 +167,13 @@ export class PlayScene extends Phaser.Scene {
       return
     }
 
-    const dimensions = getStageDimensions(this.stageNumber)
+    const stageProfile = getStageProfile(this.stageNumber)
     const stageSeed = deriveStageSeed(this.runSeed, this.stageNumber)
     const fullGame = getDifficultyPreset(this.difficulty).fullGame
-    this.maze = generateMaze(dimensions.width, dimensions.height, stageSeed)
+    this.maze = generateMaze(stageProfile.width, stageProfile.height, stageSeed, {
+      ...stageProfile.topology,
+      endpointProfile: stageProfile.endpointProfile,
+    })
     const portalIndices = fullGame ? placePortals(this.maze, stageSeed ^ 0xa4dfed5) : []
     const lifeTargetIndex = fullGame
       ? placeLifeTarget(
@@ -185,6 +193,7 @@ export class PlayScene extends Phaser.Scene {
           this.stageNumber,
           stageSeed ^ 0x5a1ce5,
           portalReservations,
+          stageProfile.hazardDensityMultiplier,
         )
       : []
     const spikeIndices = new Set(spikePlacement.map((spike) => spike.cellIndex))
@@ -207,10 +216,14 @@ export class PlayScene extends Phaser.Scene {
       portalIndices,
       lives: this.lives,
     })
-    this.mazeOrigin.x = Math.floor((GAME_WIDTH - this.maze.width * CELL_SIZE) / 2)
+    const mazeWidth = this.maze.width * CELL_SIZE
+    this.mazeOrigin.x = mazeWidth <= GAME_WIDTH
+      ? Math.floor((GAME_WIDTH - mazeWidth) / 2)
+      : 0
 
     this.drawMaze()
     this.createHud(stageSeed)
+    this.configureWorldCamera()
     const presentFeatureIds: StageFeatureId[] = []
     if (spikePlacement.length > 0) {
       presentFeatureIds.push(StageFeature.Spikes)
@@ -309,7 +322,7 @@ export class PlayScene extends Phaser.Scene {
   }
 
   private drawBackdrop(): void {
-    const graphics = this.add.graphics()
+    const graphics = this.add.graphics().setScrollFactor(0).setDepth(-10)
     graphics.fillStyle(0x05080a, 1)
     graphics.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT)
     graphics.lineStyle(1, 0x1b3b43, 0.28)
@@ -328,6 +341,38 @@ export class PlayScene extends Phaser.Scene {
     graphics.fillRect(128, 92, 24, 3)
     graphics.fillStyle(0x79f25f, 0.8)
     graphics.fillRect(GAME_WIDTH - 112, 92, 64, 3)
+
+    const header = this.add.graphics().setScrollFactor(0).setDepth(10)
+    header.fillStyle(0x05080a, 1)
+    header.fillRect(0, 0, GAME_WIDTH, MAZE_TOP - 16)
+    header.lineStyle(1, 0x1b3b43, 0.28)
+    for (let x = 0; x <= GAME_WIDTH; x += 24) {
+      header.lineBetween(x, 0, x, MAZE_TOP - 16)
+    }
+    for (let y = 0; y < MAZE_TOP - 16; y += 24) {
+      header.lineBetween(0, y, GAME_WIDTH, y)
+    }
+    header.fillStyle(0xffb629, 0.9)
+    header.fillRect(48, 92, 72, 3)
+    header.fillStyle(0xff5364, 0.8)
+    header.fillRect(128, 92, 24, 3)
+    header.fillStyle(0x79f25f, 0.8)
+    header.fillRect(GAME_WIDTH - 112, 92, 64, 3)
+  }
+
+  private configureWorldCamera(): void {
+    const mazeWidth = this.maze.width * CELL_SIZE
+    const mazeHeight = this.maze.height * CELL_SIZE
+    const worldWidth = Math.max(GAME_WIDTH, this.mazeOrigin.x + mazeWidth)
+    const worldHeight = Math.max(GAME_HEIGHT, this.mazeOrigin.y + mazeHeight)
+    const camera = this.cameras.main
+    camera.setBounds(0, 0, worldWidth, worldHeight)
+
+    if (mazeWidth > GAME_WIDTH || mazeHeight > GAME_HEIGHT - MAZE_TOP) {
+      camera.setDeadzone(GAME_WIDTH * 0.36, (GAME_HEIGHT - MAZE_TOP) * 0.36)
+      camera.startFollow(this.playerSprite, true, 0.14, 0.14)
+      camera.centerOn(this.playerSprite.x, this.playerSprite.y)
+    }
   }
 
   private drawMaze(): void {
@@ -531,11 +576,16 @@ export class PlayScene extends Phaser.Scene {
     }
 
     this.add.text(48, 32, `STAGE ${String(this.stageNumber).padStart(2, '0')}`, valueStyle)
+      .setScrollFactor(0).setDepth(11)
     this.add.text(48, 64, `SEED ${stageSeed.toString(16).toUpperCase().padStart(8, '0')}`, labelStyle)
-    this.livesText = this.add.text(GAME_WIDTH / 2, 32, '', valueStyle).setOrigin(0.5, 0)
+      .setScrollFactor(0).setDepth(11)
+    this.livesText = this.add.text(GAME_WIDTH / 2, 32, '', valueStyle)
+      .setOrigin(0.5, 0).setScrollFactor(0).setDepth(11)
 
-    this.scoreText = this.add.text(GAME_WIDTH - 48, 32, '', valueStyle).setOrigin(1, 0)
-    this.remainingText = this.add.text(GAME_WIDTH - 48, 64, '', labelStyle).setOrigin(1, 0)
+    this.scoreText = this.add.text(GAME_WIDTH - 48, 32, '', valueStyle)
+      .setOrigin(1, 0).setScrollFactor(0).setDepth(11)
+    this.remainingText = this.add.text(GAME_WIDTH - 48, 64, '', labelStyle)
+      .setOrigin(1, 0).setScrollFactor(0).setDepth(11)
     this.updateHud()
   }
 
@@ -616,7 +666,7 @@ export class PlayScene extends Phaser.Scene {
       panel,
       eyebrow,
       headline,
-    ]).setDepth(50)
+    ]).setDepth(50).setScrollFactor(0)
 
     const optionY = [-142, -38, 66, 170]
     DIFFICULTY_PRESETS.forEach((preset, index) => {
@@ -743,7 +793,7 @@ export class PlayScene extends Phaser.Scene {
       panel,
       eyebrow,
       headline,
-    ]).setDepth(40)
+    ]).setDepth(40).setScrollFactor(0)
 
     this.createPauseActionButton(0, -68, 'RETURN TO GAME [ESC]', 0x79f25f, () => {
       this.resumeFromPause()
@@ -829,7 +879,7 @@ export class PlayScene extends Phaser.Scene {
       headline,
       body,
       prompt,
-    ]).setDepth(30)
+    ]).setDepth(30).setScrollFactor(0)
     this.input.on('pointerdown', this.dismissStageIntroduction, this)
   }
 
@@ -925,6 +975,7 @@ export class PlayScene extends Phaser.Scene {
 
       if (!this.simulation.gameOver) {
         this.showRespawnOverlay()
+        this.cameras.main.centerOn(this.playerSprite.x, this.playerSprite.y)
         this.cameras.main.flash(180, 255, 83, 100, false)
       }
     }
@@ -959,7 +1010,7 @@ export class PlayScene extends Phaser.Scene {
       headline,
       cause,
       remaining,
-    ]).setDepth(25)
+    ]).setDepth(25).setScrollFactor(0)
     this.time.delayedCall(RESPAWN_PAUSE_MILLISECONDS, () => {
       this.respawnOverlay?.destroy(true)
       this.respawnOverlay = null
@@ -974,6 +1025,7 @@ export class PlayScene extends Phaser.Scene {
 
     this.observedPortalUses = this.simulation.portalUses
     this.playerSprite.setScale(1.45)
+    this.cameras.main.centerOn(this.playerSprite.x, this.playerSprite.y)
     this.cameras.main.flash(130, 56, 247, 237, false)
     this.tweens.add({
       targets: this.playerSprite,
@@ -1027,7 +1079,7 @@ export class PlayScene extends Phaser.Scene {
       color,
       backgroundColor: '#05080a',
       padding: { x: 18, y: 14 },
-    }).setOrigin(0.5).setDepth(15)
+    }).setOrigin(0.5).setDepth(15).setScrollFactor(0)
 
     this.tweens.add({
       targets: text,
@@ -1074,21 +1126,21 @@ export class PlayScene extends Phaser.Scene {
       0.96,
     )
     panel.setStrokeStyle(4, 0x79f25f, 1)
-    panel.setDepth(20)
+    panel.setDepth(20).setScrollFactor(0)
 
     const headlineY = GAME_HEIGHT / 2 - (award.coinMonger ? 78 : 52)
     this.add.text(GAME_WIDTH / 2, headlineY, casual ? 'MAZE SOLVED' : 'STAGE CLEAR', {
       fontFamily: '"Press Start 2P"',
       fontSize: '28px',
       color: '#79f25f',
-    }).setOrigin(0.5).setDepth(21)
+    }).setOrigin(0.5).setDepth(21).setScrollFactor(0)
 
     if (award.coinMonger && !casual) {
       this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 18, 'COIN MONGER!  2X', {
         fontFamily: '"Press Start 2P"',
         fontSize: '20px',
         color: '#ffcf52',
-      }).setOrigin(0.5).setDepth(21)
+      }).setOrigin(0.5).setDepth(21).setScrollFactor(0)
     }
 
     if (!casual) {
@@ -1104,7 +1156,7 @@ export class PlayScene extends Phaser.Scene {
           fontSize: award.coinMonger ? '12px' : '14px',
           color: '#ffcf52',
         },
-      ).setOrigin(0.5).setDepth(21)
+      ).setOrigin(0.5).setDepth(21).setScrollFactor(0)
     }
 
     this.time.delayedCall(1250, () => {
@@ -1131,18 +1183,18 @@ export class PlayScene extends Phaser.Scene {
 
     const panel = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 680, 390, 0x05080a, 0.97)
     panel.setStrokeStyle(4, 0xff5364, 1)
-    panel.setDepth(20)
+    panel.setDepth(20).setScrollFactor(0)
 
     this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 142, 'SIGNAL LOST', {
       fontFamily: '"Press Start 2P"',
       fontSize: '28px',
       color: '#ff5364',
-    }).setOrigin(0.5).setDepth(21)
+    }).setOrigin(0.5).setDepth(21).setScrollFactor(0)
     this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 82, getLifeMessage(source).finalCause, {
       fontFamily: '"Press Start 2P"',
       fontSize: '14px',
       color: '#f3fffe',
-    }).setOrigin(0.5).setDepth(21)
+    }).setOrigin(0.5).setDepth(21).setScrollFactor(0)
     this.add.text(
       GAME_WIDTH / 2,
       GAME_HEIGHT / 2 - 24,
@@ -1152,7 +1204,7 @@ export class PlayScene extends Phaser.Scene {
         fontSize: '14px',
         color: '#ffcf52',
       },
-    ).setOrigin(0.5).setDepth(21)
+    ).setOrigin(0.5).setDepth(21).setScrollFactor(0)
 
     this.createRunActionButton(
       GAME_WIDTH / 2 - 138,
@@ -1172,7 +1224,7 @@ export class PlayScene extends Phaser.Scene {
       fontFamily: '"Press Start 2P"',
       fontSize: '11px',
       color: '#8ba5aa',
-    }).setOrigin(0.5).setDepth(21)
+    }).setOrigin(0.5).setDepth(21).setScrollFactor(0)
   }
 
   private createRunActionButton(
@@ -1183,12 +1235,13 @@ export class PlayScene extends Phaser.Scene {
     activate: () => void,
   ): void {
     const background = this.add.rectangle(x, y, 244, 58, 0x071318, 1)
-    background.setStrokeStyle(3, color, 1).setDepth(21).setInteractive({ useHandCursor: true })
+    background.setStrokeStyle(3, color, 1).setDepth(21).setScrollFactor(0)
+      .setInteractive({ useHandCursor: true })
     this.add.text(x, y, label, {
       fontFamily: '"Press Start 2P"',
       fontSize: '12px',
       color: '#ffcf52',
-    }).setOrigin(0.5).setDepth(22)
+    }).setOrigin(0.5).setDepth(22).setScrollFactor(0)
 
     background.on('pointerover', () => background.setFillStyle(color, 0.22))
     background.on('pointerout', () => background.setFillStyle(0x071318, 1))
@@ -1254,13 +1307,6 @@ export class PlayScene extends Phaser.Scene {
 
   private cellCenterY(gridY: number): number {
     return this.mazeOrigin.y + gridY * CELL_SIZE + CELL_SIZE / 2
-  }
-}
-
-function getStageDimensions(stageNumber: number): { width: number; height: number } {
-  return {
-    width: Math.min(11 + Math.floor((stageNumber - 1) / 3) * 2, 15),
-    height: Math.min(7 + Math.floor((stageNumber - 1) / 4) * 2, 11),
   }
 }
 

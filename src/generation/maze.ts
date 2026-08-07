@@ -35,6 +35,10 @@ export interface MazeBraid {
 
 export interface MazeGenerationOptions {
   braidCount?: number
+  minimumCycleLength?: number
+  maximumCycleLength?: number
+  maximumSharedLoopCells?: number
+  endpointProfile?: 'diameter' | 'boundary-farthest'
 }
 
 interface Direction {
@@ -117,14 +121,24 @@ export function generateMaze(
 ): Maze {
   const maze = generatePerfectMaze(width, height, seed)
   const requestedBraidCount = options.braidCount ?? getBraidCountForSize(width * height)
-  maze.braids = selectBraids(maze, requestedBraidCount, seed ^ 0xb4a1d5)
+  maze.braids = selectBraids(
+    maze,
+    requestedBraidCount,
+    seed ^ 0xb4a1d5,
+    options.minimumCycleLength ?? 6,
+    options.maximumCycleLength ?? 12,
+    options.maximumSharedLoopCells ?? 1,
+  )
 
   for (const braid of maze.braids) {
     openWallBetween(maze, braid.fromIndex, braid.toIndex)
   }
 
-  const firstEndpoint = findFarthestCell(maze.cells, width, 0).index
-  const secondEndpoint = findFarthestCell(maze.cells, width, firstEndpoint).index
+  const [firstEndpoint, secondEndpoint] = selectEndpoints(
+    maze,
+    options.endpointProfile ?? 'diameter',
+    seed ^ 0xe17d901,
+  )
   maze.entrance = toPoint(firstEndpoint, width)
   maze.exit = toPoint(secondEndpoint, width)
   return maze
@@ -156,13 +170,33 @@ export function toIndex(x: number, y: number, width: number): number {
   return y * width + x
 }
 
-function selectBraids(maze: Maze, requestedCount: number, seed: number): MazeBraid[] {
+function selectBraids(
+  maze: Maze,
+  requestedCount: number,
+  seed: number,
+  minimumCycleLength: number,
+  maximumCycleLength: number,
+  maximumSharedLoopCells: number,
+): MazeBraid[] {
   if (!Number.isInteger(requestedCount) || requestedCount < 0) {
     throw new RangeError('Braid count must be a non-negative integer.')
   }
 
+  if (
+    !Number.isInteger(minimumCycleLength)
+    || !Number.isInteger(maximumCycleLength)
+    || minimumCycleLength < 4
+    || maximumCycleLength < minimumCycleLength
+  ) {
+    throw new RangeError('Cycle lengths must be integers with 4 <= minimum <= maximum.')
+  }
+
+  if (!Number.isInteger(maximumSharedLoopCells) || maximumSharedLoopCells < 0) {
+    throw new RangeError('Maximum shared loop cells must be a non-negative integer.')
+  }
+
   const random = createSeededRandom(seed)
-  const candidates = enumerateBraidCandidates(maze)
+  const candidates = enumerateBraidCandidates(maze, minimumCycleLength, maximumCycleLength)
     .map((candidate) => ({ candidate, order: random() }))
     .sort((left, right) => left.order - right.order)
     .map(({ candidate }) => candidate)
@@ -179,7 +213,7 @@ function selectBraids(maze: Maze, requestedCount: number, seed: number): MazeBra
         (total, index) => total + Number(candidateCells.has(index)),
         0,
       )
-      return overlapCount > 1
+      return overlapCount > maximumSharedLoopCells
     })
 
     if (!overlapsSelectedLoop) {
@@ -190,16 +224,34 @@ function selectBraids(maze: Maze, requestedCount: number, seed: number): MazeBra
   return selected
 }
 
-function enumerateBraidCandidates(maze: Maze): MazeBraid[] {
+function enumerateBraidCandidates(
+  maze: Maze,
+  minimumCycleLength: number,
+  maximumCycleLength: number,
+): MazeBraid[] {
   const candidates: MazeBraid[] = []
 
   for (const cell of maze.cells) {
     if (cell.x + 1 < maze.width && (cell.walls & Wall.East) !== 0) {
-      addBraidCandidate(maze, toIndex(cell.x, cell.y, maze.width), toIndex(cell.x + 1, cell.y, maze.width), candidates)
+      addBraidCandidate(
+        maze,
+        toIndex(cell.x, cell.y, maze.width),
+        toIndex(cell.x + 1, cell.y, maze.width),
+        minimumCycleLength,
+        maximumCycleLength,
+        candidates,
+      )
     }
 
     if (cell.y + 1 < maze.height && (cell.walls & Wall.South) !== 0) {
-      addBraidCandidate(maze, toIndex(cell.x, cell.y, maze.width), toIndex(cell.x, cell.y + 1, maze.width), candidates)
+      addBraidCandidate(
+        maze,
+        toIndex(cell.x, cell.y, maze.width),
+        toIndex(cell.x, cell.y + 1, maze.width),
+        minimumCycleLength,
+        maximumCycleLength,
+        candidates,
+      )
     }
   }
 
@@ -210,19 +262,22 @@ function addBraidCandidate(
   maze: Maze,
   fromIndex: number,
   toIndexValue: number,
+  minimumCycleLength: number,
+  maximumCycleLength: number,
   candidates: MazeBraid[],
 ): void {
   const pathIndices = findShortestPath(maze, fromIndex, toIndexValue)
   const existingPathLength = pathIndices.length - 1
+  const cycleLength = existingPathLength + 1
 
-  if (existingPathLength < 5 || existingPathLength > 11) {
+  if (cycleLength < minimumCycleLength || cycleLength > maximumCycleLength) {
     return
   }
 
   candidates.push({
     fromIndex,
     toIndex: toIndexValue,
-    cycleLength: existingPathLength + 1,
+    cycleLength,
     pathIndices,
   })
 }
@@ -272,12 +327,54 @@ function openWallBetween(maze: Maze, fromIndex: number, toIndexValue: number): v
   to.walls &= ~direction.opposite
 }
 
+function selectEndpoints(
+  maze: Maze,
+  profile: NonNullable<MazeGenerationOptions['endpointProfile']>,
+  seed: number,
+): [number, number] {
+  if (profile === 'diameter') {
+    const firstEndpoint = findFarthestCell(maze.cells, maze.width, 0).index
+    return [firstEndpoint, findFarthestCell(maze.cells, maze.width, firstEndpoint).index]
+  }
+
+  const boundaryIndices = maze.cells
+    .map((cell, index) => ({ cell, index }))
+    .filter(({ cell }) => {
+      return cell.x === 0
+        || cell.y === 0
+        || cell.x === maze.width - 1
+        || cell.y === maze.height - 1
+    })
+    .map(({ index }) => index)
+  const random = createSeededRandom(seed)
+  const entranceIndex = boundaryIndices[Math.floor(random() * boundaryIndices.length)]
+  const distances = findDistances(maze.cells, maze.width, entranceIndex)
+  const maximumBoundaryDistance = Math.max(...boundaryIndices.map((index) => distances[index]))
+  const qualifiedExits = boundaryIndices.filter((index) => {
+    return index !== entranceIndex && distances[index] >= maximumBoundaryDistance * 0.9
+  })
+  const exitIndex = qualifiedExits[Math.floor(random() * qualifiedExits.length)]
+  return [entranceIndex, exitIndex]
+}
+
 function findFarthestCell(cells: MazeCell[], width: number, startIndex: number) {
+  const distances = findDistances(cells, width, startIndex)
+  let farthestIndex = startIndex
+
+  for (let index = 0; index < distances.length; index += 1) {
+    if (distances[index] > distances[farthestIndex]) {
+      farthestIndex = index
+    }
+  }
+
+  return { index: farthestIndex, distance: distances[farthestIndex] }
+}
+
+function findDistances(cells: MazeCell[], width: number, startIndex: number): Int32Array {
   const distances = new Int32Array(cells.length).fill(-1)
   const queue = new Int32Array(cells.length)
   let head = 0
   let tail = 0
-  let farthestIndex = startIndex
   queue[tail++] = startIndex
   distances[startIndex] = 0
 
@@ -285,10 +382,6 @@ function findFarthestCell(cells: MazeCell[], width: number, startIndex: number) 
 
   while (head < tail) {
     const currentIndex = queue[head++]
-
-    if (distances[currentIndex] > distances[farthestIndex]) {
-      farthestIndex = currentIndex
-    }
 
     for (const neighborIndex of getOpenNeighborIndices(maze, currentIndex)) {
       if (distances[neighborIndex] !== -1) {
@@ -300,7 +393,7 @@ function findFarthestCell(cells: MazeCell[], width: number, startIndex: number) 
     }
   }
 
-  return { index: farthestIndex, distance: distances[farthestIndex] }
+  return distances
 }
 
 function toPoint(index: number, width: number): GridPoint {

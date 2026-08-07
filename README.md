@@ -51,6 +51,20 @@ Losing the final life opens a persistent run summary with the highest stage reac
 
 Some distant dead ends contain reusable portals. Entering one returns the player to the maze entrance while the hunter, collected coins, hazards, and other stage state continue unchanged. After leaving the entrance, a pulsing amber portal dot appears inside the red Start box; returning to Start then sends the player back to the last portal used. A newer portal replaces that return destination, and losing a life clears both the link and dot. Portals affect the player only.
 
+## Maze progression
+
+Maze size and route complexity now grow across five ten-stage bands:
+
+- Stages 1-10: small to medium, from `11x7` to `17x13`
+- Stages 11-20: medium to large, ending at `23x19`
+- Stages 21-30: large to extra large, ending at `29x25`
+- Stages 31-40: extra large to XXL, ending at `35x31`
+- Stages 41-50: XXL to XXXL, ending at the initial `41x37` cap
+
+Later bands add more junctions, interacting loops, and long loop-backs while retaining useful dead ends. Mazes larger than the play area keep the 48-pixel cell scale and use a player-following camera; the HUD remains fixed and there is no minimap. The Stage 50 cap is an initial calibration target for a three-to-four-minute first blind clear in Casual Mode and may be tuned from playtest results.
+
+Stage 51 and later remain at the size cap and rotate deterministic maze variations: compact interconnected loops, longer loop-backs, and qualified alternate boundary endpoints. Full-game modes also rotate between three, four, and five spikes; Casual Mode remains maze-only. Existing seed URLs remain deterministic but produce layouts from this revised generator rather than preserving layouts from earlier builds.
+
 ## Reproducible runs
 
 Append a decimal or hexadecimal seed and canonical difficulty to the URL to launch a complete run directly:
@@ -68,6 +82,14 @@ Append `&debug=maze` to highlight escape-loop paths, newly opened passages, and 
 http://localhost:5173/?seed=DEADBEEF&debug=maze
 ```
 
+While maze debugging is enabled, append a positive stage number to inspect a progression or post-cap profile directly:
+
+```text
+http://localhost:5173/?seed=DEADBEEF&difficulty=casual&debug=maze&stage=50
+```
+
+The `stage` override is ignored unless `debug=maze` is also present.
+
 ## Architecture
 
 - `src/generation/`: seeded randomness, perfect-maze foundations, controlled escape loops, final endpoints, dead-end portals, coin placement, and fair spike placement
@@ -79,6 +101,6 @@ The deterministic game modules do not depend on Phaser. Rendering runs at the br
 
 ## Current slice
 
-Implemented: four run difficulties, maze-only Casual Mode, scalable gameplay timing, sparsely braided generated stages, reusable dead-end escape portals, loop-biased coin clusters, continuous buffered movement, optional coins, stage progression, run-scoped feature briefings, one delayed hunter with stable route choices, scarce evasive extra-life targets, telegraphed timed floor spikes, retained-life respawns, a responsive sprite legend, pixel presentation, and reproducible/debug URLs.
+Implemented: four run difficulties, maze-only Casual Mode, scalable gameplay timing, five-band maze growth through Stage 50, increasingly braided route profiles, scrolling late-stage worlds, deterministic post-cap variations, reusable dead-end escape portals, loop-biased coin clusters, continuous buffered movement, optional coins, stage progression, run-scoped feature briefings, one delayed hunter with stable route choices, scarce evasive extra-life targets, telegraphed timed floor spikes, retained-life respawns, a responsive sprite legend, pixel presentation, and reproducible/debug URLs.
 
 Next: the ambusher and wanderer, moving blades, controller input, reactive audio, and local leaderboards.

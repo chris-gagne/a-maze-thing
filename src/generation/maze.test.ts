@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { getStageProfile } from '../game/stageProgression'
 import {
   generateMaze,
   generatePerfectMaze,
@@ -7,6 +8,7 @@ import {
   toIndex,
   Wall,
 } from './maze'
+import { measureMaze } from './mazeMetrics'
 
 describe('generatePerfectMaze', () => {
   it('is deterministic for a given size and seed', () => {
@@ -113,6 +115,89 @@ describe('generateMaze', () => {
     expect(generateMaze(15, 11, 91, { braidCount: 0 }).braids).toEqual([])
     expect(generateMaze(15, 11, 91, { braidCount: 1 }).braids.length).toBeLessThanOrEqual(1)
   })
+
+  it('supports deterministic topology profiles for larger mazes', () => {
+    const options = {
+      braidCount: 24,
+      minimumCycleLength: 10,
+      maximumCycleLength: 24,
+      maximumSharedLoopCells: 2,
+    }
+    const maze = generateMaze(29, 25, 4271, options)
+
+    expect(maze).toEqual(generateMaze(29, 25, 4271, options))
+    expect(maze.braids.length).toBeGreaterThan(3)
+    expect(maze.braids.length).toBeLessThanOrEqual(options.braidCount)
+
+    for (const braid of maze.braids) {
+      expect(braid.cycleLength).toBeGreaterThanOrEqual(options.minimumCycleLength)
+      expect(braid.cycleLength).toBeLessThanOrEqual(options.maximumCycleLength)
+    }
+
+    for (let left = 0; left < maze.braids.length; left += 1) {
+      for (let right = left + 1; right < maze.braids.length; right += 1) {
+        const rightCells = new Set(maze.braids[right].pathIndices)
+        const overlap = maze.braids[left].pathIndices.filter((index) => rightCells.has(index))
+        expect(overlap.length).toBeLessThanOrEqual(options.maximumSharedLoopCells)
+      }
+    }
+  })
+
+  it('rejects invalid topology profiles', () => {
+    expect(() => generateMaze(15, 11, 1, { minimumCycleLength: 3 })).toThrow(RangeError)
+    expect(() => generateMaze(15, 11, 1, {
+      minimumCycleLength: 10,
+      maximumCycleLength: 8,
+    })).toThrow(RangeError)
+    expect(() => generateMaze(15, 11, 1, { maximumSharedLoopCells: -1 })).toThrow(RangeError)
+  })
+
+  it('selects deterministic distant boundary endpoints when requested', () => {
+    for (let seed = 0; seed < 20; seed += 1) {
+      const maze = generateMaze(23, 19, seed, { endpointProfile: 'boundary-farthest' })
+      const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
+      const exitIndex = toIndex(maze.exit.x, maze.exit.y, maze.width)
+      const distances = distancesFrom(maze, entranceIndex)
+      const boundaryDistances = maze.cells
+        .filter((cell) => {
+          return cell.x === 0
+            || cell.y === 0
+            || cell.x === maze.width - 1
+            || cell.y === maze.height - 1
+        })
+        .map((cell) => distances[toIndex(cell.x, cell.y, maze.width)])
+
+      expect(maze).toEqual(generateMaze(23, 19, seed, { endpointProfile: 'boundary-farthest' }))
+      expect(isBoundaryPoint(maze.entrance, maze.width, maze.height)).toBe(true)
+      expect(isBoundaryPoint(maze.exit, maze.width, maze.height)).toBe(true)
+      expect(distances[exitIndex]).toBeGreaterThanOrEqual(Math.max(...boundaryDistances) * 0.9)
+    }
+  })
+
+  it('increases route complexity across stage-band caps', () => {
+    const bandAverages = [10, 20, 30, 40, 50].map((stageNumber) => {
+      const profile = getStageProfile(stageNumber)
+      const metrics = Array.from({ length: 5 }, (_, seed) => {
+        const maze = generateMaze(profile.width, profile.height, seed, {
+          ...profile.topology,
+          endpointProfile: profile.endpointProfile,
+        })
+        return measureMaze(maze)
+      })
+
+      return {
+        cycles: average(metrics.map((value) => value.cycleCount)),
+        loopCoverage: average(metrics.map((value) => value.loopCoverage)),
+      }
+    })
+
+    for (let index = 1; index < bandAverages.length; index += 1) {
+      expect(bandAverages[index].cycles).toBeGreaterThan(bandAverages[index - 1].cycles)
+      expect(bandAverages[index].loopCoverage).toBeGreaterThan(bandAverages[0].loopCoverage)
+    }
+
+    expect(bandAverages.at(-1)!.loopCoverage).toBeGreaterThan(bandAverages[0].loopCoverage)
+  })
 })
 
 function traverse(maze: ReturnType<typeof generatePerfectMaze>, startIndex: number): Set<number> {
@@ -154,4 +239,16 @@ function distancesFrom(maze: ReturnType<typeof generatePerfectMaze>, startIndex:
 
 function edgeKey(left: number, right: number): string {
   return left < right ? `${left}:${right}` : `${right}:${left}`
+}
+
+function isBoundaryPoint(
+  point: { x: number; y: number },
+  width: number,
+  height: number,
+): boolean {
+  return point.x === 0 || point.y === 0 || point.x === width - 1 || point.y === height - 1
+}
+
+function average(values: readonly number[]): number {
+  return values.reduce((total, value) => total + value, 0) / values.length
 }
