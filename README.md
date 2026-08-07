@@ -14,8 +14,11 @@ Create a production build with `npm run build` and run the deterministic test su
 ## Controls
 
 - Arrow keys or `WASD`: queue a direction at the next legal junction
+- `Enter`, `Space`, click, or tap: dismiss a stage briefing
 
 Movement continues until blocked. The hunter remains dormant until the player starts moving, then follows from the entrance after a short delay.
+
+A fresh run opens with a short maze briefing. Later stages pause for one combined introduction only when their generated layout contains something not yet seen in that run, such as spikes or the evasive Extra Life. The maze simulation and hazard timers remain frozen until the briefing is dismissed; game over resets these discoveries for the next run.
 
 Floor spikes damage the player only while active. They never damage hostile enemies, but active spikes block new hunter routes; inactive, warning, and recovery phases remain traversable. Future ambusher and wanderer enemies will use the same blocker-aware navigation.
 
@@ -51,6 +54,6 @@ The deterministic game modules do not depend on Phaser. Rendering runs at the br
 
 ## Current slice
 
-Implemented: sparsely braided generated stages, reusable dead-end escape portals, loop-biased coin clusters, continuous buffered movement, optional coins, stage progression, one delayed hunter with stable route choices, scarce evasive extra-life targets, telegraphed timed floor spikes, retained-life respawns, a responsive sprite legend, pixel presentation, and reproducible/debug URLs.
+Implemented: sparsely braided generated stages, reusable dead-end escape portals, loop-biased coin clusters, continuous buffered movement, optional coins, stage progression, run-scoped feature briefings, one delayed hunter with stable route choices, scarce evasive extra-life targets, telegraphed timed floor spikes, retained-life respawns, a responsive sprite legend, pixel presentation, and reproducible/debug URLs.
 
 Next: the ambusher and wanderer, moving blades, pause treatment, controller input, reactive audio, and local leaderboards.

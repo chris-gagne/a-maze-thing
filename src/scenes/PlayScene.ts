@@ -11,6 +11,12 @@ import {
 } from '../game/stageSimulation'
 import { parseRunSeed } from '../game/runSeed'
 import { getSpikePhase, SpikePhase } from '../game/spikeTiming'
+import {
+  selectStageIntroduction,
+  StageFeature,
+  type StageFeatureId,
+  type StageIntroduction,
+} from '../game/stageIntroductions'
 import { createCoinPlacement } from '../generation/coinPlacement'
 import { placeLifeTarget } from '../generation/lifeTargetPlacement'
 import { generateMaze, type Maze, Wall } from '../generation/maze'
@@ -34,6 +40,7 @@ interface RunSceneData {
   carriedScore: number
   runSeed: number
   lives: number
+  introducedFeatureIds: readonly StageFeatureId[]
 }
 
 interface MovementKeys {
@@ -50,6 +57,8 @@ export class PlayScene extends Phaser.Scene {
   private lives = 1
   private accumulator = 0
   private stageResolved = false
+  private introducedFeatureIds = new Set<StageFeatureId>()
+  private stageIntroduction: Phaser.GameObjects.Container | null = null
   private maze!: Maze
   private simulation!: StageSimulation
   private mazeOrigin = { x: 0, y: MAZE_TOP }
@@ -61,6 +70,8 @@ export class PlayScene extends Phaser.Scene {
   private remainingText!: Phaser.GameObjects.Text
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private movementKeys!: MovementKeys
+  private introductionEnterKey!: Phaser.Input.Keyboard.Key
+  private introductionSpaceKey!: Phaser.Input.Keyboard.Key
   private coinSprites = new Map<number, Phaser.GameObjects.Image>()
   private spikeSprites = new Map<number, Phaser.GameObjects.Image>()
   private loopAnchors: number[] = []
@@ -77,8 +88,10 @@ export class PlayScene extends Phaser.Scene {
     this.carriedScore = data.carriedScore ?? 0
     this.runSeed = data.runSeed ?? createRunSeed()
     this.lives = data.lives ?? 1
+    this.introducedFeatureIds = new Set(data.introducedFeatureIds ?? [])
     this.accumulator = 0
     this.stageResolved = false
+    this.stageIntroduction = null
     this.coinSprites.clear()
     this.spikeSprites.clear()
     this.loopAnchors = []
@@ -137,11 +150,38 @@ export class PlayScene extends Phaser.Scene {
     this.drawMaze()
     this.createHud(stageSeed)
     this.bindInput()
+    const presentFeatureIds: StageFeatureId[] = []
+    if (spikePlacement.length > 0) {
+      presentFeatureIds.push(StageFeature.Spikes)
+    }
+    if (lifeTargetIndex !== null) {
+      presentFeatureIds.push(StageFeature.ExtraLife)
+    }
+
+    const introduction = selectStageIntroduction(
+      this.stageNumber,
+      presentFeatureIds,
+      this.introducedFeatureIds,
+    )
+    if (introduction !== null) {
+      this.introducedFeatureIds = new Set(introduction.introducedFeatureIds)
+      this.showStageIntroduction(introduction)
+    }
     this.cameras.main.fadeIn(180, 5, 8, 10)
   }
 
   update(_time: number, deltaMilliseconds: number): void {
     if (this.stageResolved) {
+      return
+    }
+
+    if (this.stageIntroduction !== null) {
+      if (
+        Phaser.Input.Keyboard.JustDown(this.introductionEnterKey)
+        || Phaser.Input.Keyboard.JustDown(this.introductionSpaceKey)
+      ) {
+        this.dismissStageIntroduction()
+      }
       return
     }
 
@@ -413,6 +453,57 @@ export class PlayScene extends Phaser.Scene {
       down: Phaser.Input.Keyboard.KeyCodes.S,
       left: Phaser.Input.Keyboard.KeyCodes.A,
     }) as MovementKeys
+    this.introductionEnterKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER)
+    this.introductionSpaceKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)
+  }
+
+  private showStageIntroduction(introduction: StageIntroduction): void {
+    const panel = this.add.rectangle(0, 0, 720, 330, 0x05080a, 0.97)
+    panel.setStrokeStyle(4, 0x42e8df, 1)
+
+    const eyebrow = this.add.text(0, -122, `STAGE ${String(this.stageNumber).padStart(2, '0')}`, {
+      fontFamily: '"Press Start 2P"',
+      fontSize: '12px',
+      color: '#8ba5aa',
+    }).setOrigin(0.5)
+    const headline = this.add.text(0, -78, introduction.headline, {
+      fontFamily: '"Press Start 2P"',
+      fontSize: '28px',
+      color: '#ffcf52',
+    }).setOrigin(0.5)
+    const body = this.add.text(0, 10, introduction.lines.join('\n\n'), {
+      fontFamily: '"Press Start 2P"',
+      fontSize: '14px',
+      color: '#f3fffe',
+      align: 'center',
+      lineSpacing: 10,
+      wordWrap: { width: 620, useAdvancedWrap: true },
+    }).setOrigin(0.5)
+    const prompt = this.add.text(0, 126, 'ENTER / SPACE / CLICK TO START', {
+      fontFamily: '"Press Start 2P"',
+      fontSize: '12px',
+      color: '#79f25f',
+    }).setOrigin(0.5)
+
+    this.stageIntroduction = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2, [
+      panel,
+      eyebrow,
+      headline,
+      body,
+      prompt,
+    ]).setDepth(30)
+    this.input.on('pointerdown', this.dismissStageIntroduction, this)
+  }
+
+  private dismissStageIntroduction(): void {
+    if (this.stageIntroduction === null) {
+      return
+    }
+
+    this.input.off('pointerdown', this.dismissStageIntroduction, this)
+    this.stageIntroduction.destroy(true)
+    this.stageIntroduction = null
+    this.accumulator = 0
   }
 
   private captureDirectionInput(): void {
@@ -571,6 +662,7 @@ export class PlayScene extends Phaser.Scene {
         carriedScore: totalScore,
         runSeed: this.runSeed,
         lives: this.simulation.lives,
+        introducedFeatureIds: [...this.introducedFeatureIds],
       })
     })
   }
