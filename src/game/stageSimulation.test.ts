@@ -1,0 +1,414 @@
+import { describe, expect, it } from 'vitest'
+import {
+  generateMaze,
+  generatePerfectMaze,
+  getOpenNeighborIndices,
+  type Maze,
+  toIndex,
+  Wall,
+} from '../generation/maze'
+import {
+  createStageSimulation,
+  Direction,
+  getHunterGridPosition,
+  getLifeTargetGridPosition,
+  getPlayerGridPosition,
+  getSpikePhase,
+  HUNTER_DIRECTION_PRIORITY,
+  queuePlayerDirection,
+  SpikePhase,
+  updateStageSimulation,
+} from './stageSimulation'
+
+describe('stage simulation', () => {
+  it('does not move through a wall', () => {
+    const maze = generatePerfectMaze(5, 5, 12)
+    const simulation = createStageSimulation(maze)
+    const entrance = maze.cells[simulation.player.cellIndex]
+    const blockedDirection = [Direction.North, Direction.East, Direction.South, Direction.West]
+      .find((direction) => {
+        const before = simulation.player.cellIndex
+        queuePlayerDirection(simulation, direction)
+        updateStageSimulation(simulation, 0.1, 1)
+        const blocked = simulation.player.cellIndex === before && simulation.player.targetCellIndex === null
+        simulation.player.queuedDirection = null
+        return blocked
+      })
+
+    expect(entrance).toBeDefined()
+    expect(blockedDirection).toBeDefined()
+    expect(getPlayerGridPosition(simulation)).toEqual({ x: entrance.x, y: entrance.y })
+  })
+
+  it('buffers a turn until the requested direction opens', () => {
+    const maze = generatePerfectMaze(8, 8, 61)
+    const route = routeBetween(maze, toIndex(maze.entrance.x, maze.entrance.y, maze.width), 6)
+    const simulation = createStageSimulation(maze)
+    const firstDirection = directionBetween(maze, route[0], route[1])
+    const secondDirection = directionBetween(maze, route[1], route[2])
+
+    queuePlayerDirection(simulation, firstDirection)
+    updateStageSimulation(simulation, 0.25, 2)
+    queuePlayerDirection(simulation, secondDirection)
+    updateStageSimulation(simulation, 0.75, 2)
+
+    expect(simulation.player.cellIndex).toBe(route[2])
+    expect(simulation.player.direction).toBe(secondDirection)
+  })
+
+  it('collects coins on arrival and completes only at the exit', () => {
+    const maze = generatePerfectMaze(6, 6, 84)
+    const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
+    const exitIndex = toIndex(maze.exit.x, maze.exit.y, maze.width)
+    const route = routeTo(maze, entranceIndex, exitIndex)
+    const simulation = createStageSimulation(maze, { coinIndices: route.slice(1, -1) })
+
+    for (let index = 1; index < route.length; index += 1) {
+      queuePlayerDirection(simulation, directionBetween(maze, route[index - 1], route[index]))
+      updateStageSimulation(simulation, 1, 1)
+    }
+
+    expect(simulation.complete).toBe(true)
+    expect(simulation.collectedCoins).toBe(route.length - 2)
+    expect(simulation.coins.size).toBe(0)
+  })
+
+  it('releases the hunter only after the player moves and ends the run on contact', () => {
+    const maze = generatePerfectMaze(6, 6, 108)
+    const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
+    const route = routeBetween(maze, entranceIndex, 4)
+    const simulation = createStageSimulation(maze, {
+      hunter: { startCellIndex: entranceIndex, releaseDelaySeconds: 0.5 },
+    })
+
+    updateStageSimulation(simulation, 0.5, 0, 2)
+    expect(simulation.hunter?.active).toBe(false)
+
+    queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
+    updateStageSimulation(simulation, 0.2, 5, 2)
+    expect(simulation.player.cellIndex).toBe(route[1])
+    expect(simulation.hunter?.active).toBe(false)
+
+    updateStageSimulation(simulation, 0.8, 0, 2)
+    expect(simulation.hunter?.active).toBe(true)
+    expect(getHunterGridPosition(simulation)).toEqual(getPlayerGridPosition(simulation))
+    expect(simulation.gameOver).toBe(true)
+  })
+
+  it('does not pause a started release countdown when the player returns to the entrance', () => {
+    const maze = generatePerfectMaze(6, 6, 205)
+    const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
+    const route = routeBetween(maze, entranceIndex, 3)
+    const simulation = createStageSimulation(maze, {
+      hunter: { startCellIndex: entranceIndex, releaseDelaySeconds: 0.5 },
+    })
+
+    queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
+    updateStageSimulation(simulation, 0.2, 5, 2)
+    queuePlayerDirection(simulation, directionBetween(maze, route[1], route[0]))
+    updateStageSimulation(simulation, 0.2, 5, 2)
+
+    expect(simulation.player.cellIndex).toBe(entranceIndex)
+    expect(simulation.hunter?.releaseStarted).toBe(true)
+
+    updateStageSimulation(simulation, 0.2, 0, 2)
+    expect(simulation.hunter?.active).toBe(true)
+    expect(simulation.gameOver).toBe(true)
+  })
+
+  it('uses a stable direction priority when a loop offers equal hunter routes', () => {
+    const simulation = createStageSimulation(createFourCellLoop(), {
+      hunter: { startCellIndex: 3, releaseDelaySeconds: 0 },
+    })
+    simulation.hunter!.releaseStarted = true
+
+    updateStageSimulation(simulation, 1, 0, 1)
+
+    expect(HUNTER_DIRECTION_PRIORITY).toEqual([
+      Direction.North,
+      Direction.East,
+      Direction.South,
+      Direction.West,
+    ])
+    expect(simulation.hunter?.cellIndex).toBe(1)
+    expect(simulation.gameOver).toBe(false)
+  })
+
+  it('keeps the direct exit route winnable across braided seeds', () => {
+    for (let seed = 0; seed < 100; seed += 1) {
+      const maze = generateMaze(11, 7, seed)
+      const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
+      const exitIndex = toIndex(maze.exit.x, maze.exit.y, maze.width)
+      const route = routeTo(maze, entranceIndex, exitIndex)
+      const simulation = createStageSimulation(maze, {
+        hunter: { startCellIndex: entranceIndex, releaseDelaySeconds: 2.4 },
+      })
+
+      for (let index = 1; index < route.length && !simulation.gameOver; index += 1) {
+        queuePlayerDirection(simulation, directionBetween(maze, route[index - 1], route[index]))
+        updateStageSimulation(simulation, 0.2, 5, 3.25)
+      }
+
+      expect(simulation.gameOver, `seed ${seed}`).toBe(false)
+      expect(simulation.complete, `seed ${seed}`).toBe(true)
+    }
+  })
+
+  it('spends a retained life and resets entities without restoring collected coins', () => {
+    const maze = generatePerfectMaze(6, 6, 312)
+    const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
+    const route = routeBetween(maze, entranceIndex, 4)
+    const simulation = createStageSimulation(maze, {
+      coinIndices: [route[1]],
+      hunter: { startCellIndex: entranceIndex, releaseDelaySeconds: 0 },
+      lives: 2,
+    })
+    simulation.hunter!.releaseStarted = true
+
+    queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
+    updateStageSimulation(simulation, 0.2, 5, 0)
+    expect(simulation.collectedCoins).toBe(1)
+
+    updateStageSimulation(simulation, 0.5, 0, 2)
+
+    expect(simulation.lives).toBe(1)
+    expect(simulation.livesLost).toBe(1)
+    expect(simulation.gameOver).toBe(false)
+    expect(simulation.player.cellIndex).toBe(entranceIndex)
+    expect(simulation.hunter?.cellIndex).toBe(entranceIndex)
+    expect(simulation.hunter?.active).toBe(false)
+    expect(simulation.coins.size).toBe(0)
+    expect(simulation.collectedCoins).toBe(1)
+  })
+
+  it('collects an extra-life target exactly once', () => {
+    const maze = generatePerfectMaze(6, 6, 711)
+    const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
+    const route = routeBetween(maze, entranceIndex, 3)
+    const simulation = createStageSimulation(maze, {
+      lifeTarget: { startCellIndex: route[1] },
+    })
+
+    queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
+    updateStageSimulation(simulation, 0.2, 5)
+    updateStageSimulation(simulation, 1, 0)
+
+    expect(simulation.lives).toBe(2)
+    expect(simulation.livesGained).toBe(1)
+    expect(simulation.lifeTarget?.collected).toBe(true)
+    expect(getLifeTargetGridPosition(simulation)).toBeNull()
+  })
+
+  it('moves the extra-life target down the route that increases player distance', () => {
+    const maze = createThreeCellLine()
+    const simulation = createStageSimulation(maze, {
+      lifeTarget: { startCellIndex: 1 },
+    })
+
+    updateStageSimulation(simulation, 1, 0, 0, 1)
+
+    expect(simulation.lifeTarget?.cellIndex).toBe(2)
+    expect(getLifeTargetGridPosition(simulation)).toEqual({ x: 2, y: 0 })
+    expect(simulation.lives).toBe(1)
+  })
+
+  it('leaves a local maximum to explore a less-visited branch', () => {
+    const maze = createBranchedCorridor()
+    const simulation = createStageSimulation(maze, {
+      lifeTarget: { startCellIndex: 2 },
+    })
+    const visitedCells: number[] = []
+
+    for (let update = 0; update < 3; update += 1) {
+      updateStageSimulation(simulation, 1, 0, 0, 1)
+      visitedCells.push(simulation.lifeTarget!.cellIndex)
+    }
+
+    expect(visitedCells).toEqual([1, 4, 5])
+    expect(simulation.lifeTarget?.cellIndex).toBe(5)
+    expect(simulation.lifeTarget?.explorationTargetCellIndex).toBeNull()
+    expect(simulation.lifeTarget?.targetCellIndex).toBeNull()
+    expect(simulation.lifeTarget?.visitCounts[2]).toBe(1)
+    expect(simulation.lifeTarget?.visitCounts[5]).toBe(1)
+  })
+
+  it('cycles spikes through readable telegraph phases', () => {
+    const spike = { cellIndex: 0, phaseOffsetSeconds: 0 }
+
+    expect(getSpikePhase(spike, 0)).toBe(SpikePhase.Inactive)
+    expect(getSpikePhase(spike, 1.5)).toBe(SpikePhase.Warning)
+    expect(getSpikePhase(spike, 2.1)).toBe(SpikePhase.Active)
+    expect(getSpikePhase(spike, 2.7)).toBe(SpikePhase.Recovery)
+    expect(getSpikePhase(spike, 3)).toBe(SpikePhase.Inactive)
+  })
+
+  it('does not damage the player during a spike warning', () => {
+    const maze = generatePerfectMaze(6, 6, 902)
+    const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
+    const route = routeBetween(maze, entranceIndex, 3)
+    const simulation = createStageSimulation(maze, {
+      spikes: [{ cellIndex: route[1], phaseOffsetSeconds: 1.3 }],
+      lives: 2,
+    })
+
+    queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
+    updateStageSimulation(simulation, 0.2, 5)
+
+    expect(getSpikePhase(simulation.spikes[0], simulation.elapsedSeconds)).toBe(SpikePhase.Warning)
+    expect(simulation.lives).toBe(2)
+    expect(simulation.livesLost).toBe(0)
+    expect(simulation.player.cellIndex).toBe(route[1])
+  })
+
+  it('spends a life on an active spike without resetting coins or the hazard clock', () => {
+    const maze = generatePerfectMaze(6, 6, 903)
+    const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
+    const route = routeBetween(maze, entranceIndex, 3)
+    const simulation = createStageSimulation(maze, {
+      coinIndices: [route[1]],
+      spikes: [{ cellIndex: route[1], phaseOffsetSeconds: 2 }],
+      lives: 2,
+    })
+
+    queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
+    updateStageSimulation(simulation, 0.2, 5)
+
+    expect(getSpikePhase(simulation.spikes[0], simulation.elapsedSeconds)).toBe(SpikePhase.Active)
+    expect(simulation.lives).toBe(1)
+    expect(simulation.livesLost).toBe(1)
+    expect(simulation.gameOver).toBe(false)
+    expect(simulation.player.cellIndex).toBe(entranceIndex)
+    expect(simulation.collectedCoins).toBe(1)
+    expect(simulation.coins.size).toBe(0)
+    expect(simulation.elapsedSeconds).toBeCloseTo(0.2)
+  })
+
+  it('ends the run when an active spike takes the final life', () => {
+    const maze = generatePerfectMaze(6, 6, 904)
+    const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
+    const route = routeBetween(maze, entranceIndex, 3)
+    const simulation = createStageSimulation(maze, {
+      spikes: [{ cellIndex: route[1], phaseOffsetSeconds: 2 }],
+    })
+
+    queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
+    updateStageSimulation(simulation, 0.2, 5)
+
+    expect(simulation.lives).toBe(0)
+    expect(simulation.livesLost).toBe(1)
+    expect(simulation.gameOver).toBe(true)
+  })
+})
+
+function createFourCellLoop(): Maze {
+  return {
+    width: 2,
+    height: 2,
+    seed: 0,
+    entrance: { x: 0, y: 0 },
+    exit: { x: 1, y: 1 },
+    braids: [{ fromIndex: 2, toIndex: 3, cycleLength: 4, pathIndices: [2, 0, 1, 3] }],
+    cells: [
+      { x: 0, y: 0, walls: Wall.North | Wall.West },
+      { x: 1, y: 0, walls: Wall.North | Wall.East },
+      { x: 0, y: 1, walls: Wall.South | Wall.West },
+      { x: 1, y: 1, walls: Wall.East | Wall.South },
+    ],
+  }
+}
+
+function routeBetween(maze: ReturnType<typeof generatePerfectMaze>, startIndex: number, length: number): number[] {
+  const route = [startIndex]
+  let previous = -1
+
+  while (route.length < length) {
+    const current = route[route.length - 1]
+    const next = getOpenNeighborIndices(maze, current).find((index) => index !== previous)
+
+    if (next === undefined) {
+      break
+    }
+
+    previous = current
+    route.push(next)
+  }
+
+  if (route.length < 3) {
+    throw new Error('Expected a route with at least three cells.')
+  }
+
+  return route
+}
+
+function routeTo(maze: ReturnType<typeof generatePerfectMaze>, startIndex: number, targetIndex: number): number[] {
+  const previous = new Int32Array(maze.cells.length).fill(-1)
+  const pending = [startIndex]
+  previous[startIndex] = startIndex
+
+  for (let index = 0; index < pending.length; index += 1) {
+    const current = pending[index]
+
+    for (const neighbor of getOpenNeighborIndices(maze, current)) {
+      if (previous[neighbor] === -1) {
+        previous[neighbor] = current
+        pending.push(neighbor)
+      }
+    }
+  }
+
+  const route = [targetIndex]
+  while (route[route.length - 1] !== startIndex) {
+    route.push(previous[route[route.length - 1]])
+  }
+
+  return route.reverse()
+}
+
+function directionBetween(
+  maze: ReturnType<typeof generatePerfectMaze>,
+  fromIndex: number,
+  toIndexValue: number,
+) {
+  const from = maze.cells[fromIndex]
+  const to = maze.cells[toIndexValue]
+
+  if (to.x > from.x) return Direction.East
+  if (to.x < from.x) return Direction.West
+  if (to.y > from.y) return Direction.South
+  return Direction.North
+}
+
+function createThreeCellLine(): Maze {
+  return {
+    width: 3,
+    height: 1,
+    seed: 0,
+    entrance: { x: 0, y: 0 },
+    exit: { x: 2, y: 0 },
+    braids: [],
+    cells: [
+      { x: 0, y: 0, walls: Wall.North | Wall.South | Wall.West },
+      { x: 1, y: 0, walls: Wall.North | Wall.South },
+      { x: 2, y: 0, walls: Wall.North | Wall.East | Wall.South },
+    ],
+  }
+}
+
+function createBranchedCorridor(): Maze {
+  return {
+    width: 3,
+    height: 2,
+    seed: 0,
+    entrance: { x: 0, y: 0 },
+    exit: { x: 2, y: 1 },
+    braids: [],
+    cells: [
+      { x: 0, y: 0, walls: Wall.North | Wall.West },
+      { x: 1, y: 0, walls: Wall.North },
+      { x: 2, y: 0, walls: Wall.North | Wall.East | Wall.South },
+      { x: 0, y: 1, walls: Wall.East | Wall.South | Wall.West },
+      { x: 1, y: 1, walls: Wall.South },
+      { x: 2, y: 1, walls: Wall.North | Wall.East | Wall.South },
+    ],
+  }
+}
