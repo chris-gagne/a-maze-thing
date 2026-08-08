@@ -909,32 +909,44 @@ export class PlayScene extends Phaser.Scene {
   }
 
   private showStageIntroduction(introduction: StageIntroduction): void {
-    const panel = this.add.rectangle(0, 0, 720, 330, 0x05080a, 0.97)
-    panel.setStrokeStyle(4, 0x42e8df, 1)
-
-    const eyebrow = this.add.text(0, -122, `STAGE ${String(this.stageNumber).padStart(2, '0')}`, {
+    const eyebrow = this.add.text(0, 0, `STAGE ${String(this.stageNumber).padStart(2, '0')}`, {
       fontFamily: '"Press Start 2P"',
       fontSize: '12px',
       color: '#8ba5aa',
-    }).setOrigin(0.5)
-    const headline = this.add.text(0, -78, introduction.headline, {
+    }).setOrigin(0.5, 0)
+    const headline = this.add.text(0, 0, introduction.headline, {
       fontFamily: '"Press Start 2P"',
       fontSize: '28px',
       color: '#ffcf52',
-    }).setOrigin(0.5)
-    const body = this.add.text(0, 10, introduction.lines.join('\n\n'), {
+    }).setOrigin(0.5, 0)
+    const body = this.add.text(0, 0, introduction.lines.join('\n\n'), {
       fontFamily: '"Press Start 2P"',
       fontSize: '14px',
       color: '#f3fffe',
       align: 'center',
       lineSpacing: 10,
       wordWrap: { width: 620, useAdvancedWrap: true },
-    }).setOrigin(0.5)
-    const prompt = this.add.text(0, 126, 'ENTER / SPACE / CLICK TO START', {
+    }).setOrigin(0.5, 0)
+    const prompt = this.add.text(0, 0, 'ENTER / SPACE / CLICK TO START', {
       fontFamily: '"Press Start 2P"',
       fontSize: '12px',
       color: '#79f25f',
-    }).setOrigin(0.5)
+    }).setOrigin(0.5, 0)
+
+    const panelPaddingY = 32
+    eyebrow.y = 0
+    headline.y = eyebrow.y + eyebrow.height + 24
+    body.y = headline.y + headline.height + 30
+    prompt.y = body.y + body.height + 28
+
+    const panelHeight = prompt.y + prompt.height + panelPaddingY * 2
+    const contentOffsetY = -panelHeight / 2 + panelPaddingY
+    for (const text of [eyebrow, headline, body, prompt]) {
+      text.y += contentOffsetY
+    }
+
+    const panel = this.add.rectangle(0, 0, 720, panelHeight, 0x05080a, 0.97)
+    panel.setStrokeStyle(4, 0x42e8df, 1)
 
     this.stageIntroduction = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2, [
       panel,
