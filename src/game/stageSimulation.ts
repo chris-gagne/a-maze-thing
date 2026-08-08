@@ -2,10 +2,13 @@ import { type GridPoint, type Maze, toIndex, Wall } from '../generation/maze'
 import { findNextEnemyCellTowardIndex } from './enemyNavigation'
 import type { EntityMovementSpeeds } from './gamePacing'
 import { DamageSource, INITIAL_LIVES, MAX_LIVES, type DamageSource as DamageSourceValue } from './lifeRules'
+import { getEdgeKey, getShutterPhase, ShutterPhase, type ShutterState } from './shutterTiming'
 import { getSpikePhase, type SpikeState, SpikePhase } from './spikeTiming'
 
 export { getSpikePhase, SpikePhase } from './spikeTiming'
 export type { SpikeState } from './spikeTiming'
+export { getShutterPhase, ShutterPhase } from './shutterTiming'
+export type { ShutterState } from './shutterTiming'
 
 export const Direction = {
   North: 'north',
@@ -80,6 +83,7 @@ export interface StageSimulation {
   wandererTriggers: number
   lifeTarget: LifeTargetState | null
   spikes: SpikeState[]
+  shutters: ShutterState[]
   portals: Set<number>
   portalUses: number
   lastUsedPortalCellIndex: number | null
@@ -114,6 +118,7 @@ export interface StageSimulationOptions {
     startCellIndex: number
   }
   spikes?: Iterable<SpikeState>
+  shutters?: Iterable<ShutterState>
   portalIndices?: Iterable<number>
   lives?: number
 }
@@ -224,6 +229,7 @@ export function createStageSimulation(
           collected: false,
         },
     spikes: [...(options.spikes ?? [])],
+    shutters: [...(options.shutters ?? [])],
     portals,
     portalUses: 0,
     lastUsedPortalCellIndex: null,
@@ -491,7 +497,10 @@ function selectWandererNeighbor(simulation: StageSimulation): number | null {
 
   const blocked = getActiveSpikeCellIndices(simulation)
   let candidates = getEnemyNeighborIndices(simulation.maze, wanderer.cellIndex)
-    .filter((cellIndex) => !blocked.has(cellIndex))
+    .filter((cellIndex) => {
+      return !blocked.has(cellIndex)
+        && !isShutterEdgeClosed(simulation, wanderer.cellIndex, cellIndex)
+    })
   const forwardCandidates = candidates.filter((cellIndex) => cellIndex !== wanderer.previousCellIndex)
   if (forwardCandidates.length > 0) {
     candidates = forwardCandidates
@@ -639,7 +648,11 @@ function beginNextSegment(simulation: StageSimulation): boolean {
     ? null
     : getNeighborInDirection(simulation.maze, player.cellIndex, player.queuedDirection)
 
-  if (player.queuedDirection !== null && queuedTarget !== null) {
+  if (
+    player.queuedDirection !== null
+    && queuedTarget !== null
+    && !isShutterEdgeClosed(simulation, player.cellIndex, queuedTarget)
+  ) {
     player.direction = player.queuedDirection
     player.queuedDirection = null
     player.targetCellIndex = queuedTarget
@@ -651,7 +664,11 @@ function beginNextSegment(simulation: StageSimulation): boolean {
     return false
   }
 
-  player.targetCellIndex = getNeighborInDirection(simulation.maze, player.cellIndex, player.direction)
+  const directionTarget = getNeighborInDirection(simulation.maze, player.cellIndex, player.direction)
+  player.targetCellIndex = directionTarget !== null
+    && !isShutterEdgeClosed(simulation, player.cellIndex, directionTarget)
+    ? directionTarget
+    : null
   if (player.targetCellIndex !== null) {
     armPortalReturnAfterLeavingEntrance(simulation)
   }
@@ -730,7 +747,20 @@ function findNextCellTowardPlayer(simulation: StageSimulation, pursuerCellIndex:
     targetIndex,
     getActiveSpikeCellIndices(simulation),
     getEnemyNeighborIndices,
+    (fromIndex, toIndex) => isShutterEdgeClosed(simulation, fromIndex, toIndex),
   )
+}
+
+function isShutterEdgeClosed(
+  simulation: StageSimulation,
+  fromCellIndex: number,
+  toCellIndex: number,
+): boolean {
+  const edgeKey = getEdgeKey(fromCellIndex, toCellIndex)
+  return simulation.shutters.some((shutter) => {
+    return getEdgeKey(shutter.fromCellIndex, shutter.toCellIndex) === edgeKey
+      && getShutterPhase(shutter, simulation.elapsedSeconds) === ShutterPhase.Closed
+  })
 }
 
 function getEnemyNeighborIndices(maze: Maze, cellIndex: number): readonly number[] {
@@ -835,7 +865,7 @@ function findNextCellAwayFromPlayer(simulation: StageSimulation): number | null 
 
   if (lifeTarget.explorationTargetCellIndex !== null) {
     return findNextCellTowardIndex(
-      simulation.maze,
+      simulation,
       lifeTarget.cellIndex,
       lifeTarget.explorationTargetCellIndex,
     )
@@ -843,7 +873,10 @@ function findNextCellAwayFromPlayer(simulation: StageSimulation): number | null 
 
   const neighbors = HUNTER_DIRECTION_PRIORITY.flatMap((direction) => {
     const neighborIndex = getNeighborInDirection(simulation.maze, lifeTarget.cellIndex, direction)
-    return neighborIndex === null ? [] : [neighborIndex]
+    return neighborIndex === null
+      || isShutterEdgeClosed(simulation, lifeTarget.cellIndex, neighborIndex)
+      ? []
+      : [neighborIndex]
   })
   const fartherNeighbors = neighbors.filter(
     (index) => distances[index] > distances[lifeTarget.cellIndex],
@@ -865,7 +898,7 @@ function findNextCellAwayFromPlayer(simulation: StageSimulation): number | null 
   return lifeTarget.explorationTargetCellIndex === null
     ? null
     : findNextCellTowardIndex(
-        simulation.maze,
+      simulation,
         lifeTarget.cellIndex,
         lifeTarget.explorationTargetCellIndex,
       )
@@ -904,10 +937,11 @@ function selectExplorationTarget(
 }
 
 function findNextCellTowardIndex(
-  maze: Maze,
+  simulation: StageSimulation,
   startIndex: number,
   targetIndex: number,
 ): number | null {
+  const { maze } = simulation
   if (startIndex === targetIndex) {
     return null
   }
@@ -925,7 +959,11 @@ function findNextCellTowardIndex(
     for (const direction of HUNTER_DIRECTION_PRIORITY) {
       const neighborIndex = getNeighborInDirection(maze, currentIndex, direction)
 
-      if (neighborIndex !== null && previous[neighborIndex] === -1) {
+      if (
+        neighborIndex !== null
+        && previous[neighborIndex] === -1
+        && !isShutterEdgeClosed(simulation, currentIndex, neighborIndex)
+      ) {
         previous[neighborIndex] = currentIndex
         queue[tail++] = neighborIndex
       }

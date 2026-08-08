@@ -22,6 +22,30 @@ describe('findNextEnemyCellTowardIndex', () => {
 
     expect(findNextEnemyCellTowardIndex(maze, 0, 3, new Set([0]), getNeighbors)).toBe(1)
   })
+
+  it('takes a stable route around a blocked edge in either direction', () => {
+    const maze = createFourCellLoop()
+    const isEdgeBlocked = (fromIndex: number, toIndex: number): boolean => {
+      return (fromIndex === 0 && toIndex === 1) || (fromIndex === 1 && toIndex === 0)
+    }
+
+    expect(findNextEnemyCellTowardIndex(
+      maze,
+      0,
+      3,
+      new Set(),
+      getNeighbors,
+      isEdgeBlocked,
+    )).toBe(2)
+    expect(findNextEnemyCellTowardIndex(
+      maze,
+      1,
+      2,
+      new Set(),
+      getNeighbors,
+      isEdgeBlocked,
+    )).toBe(3)
+  })
 })
 
 function getNeighbors(_maze: Maze, cellIndex: number): readonly number[] {

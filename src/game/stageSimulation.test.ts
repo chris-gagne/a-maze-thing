@@ -357,6 +357,42 @@ describe('stage simulation', () => {
     expect(simulation.gameOver).toBe(false)
   })
 
+  it('stops at a closed shutter and resumes automatically when it opens', () => {
+    const simulation = createStageSimulation(createFourCellLoop(), {
+      coinIndices: [],
+      shutters: [{ fromCellIndex: 0, toCellIndex: 1, phaseOffsetSeconds: 5 }],
+    })
+
+    queuePlayerDirection(simulation, Direction.East)
+    updateStageSimulation(simulation, 0.5, { player: 1 })
+
+    expect(simulation.player.cellIndex).toBe(0)
+    expect(simulation.player.targetCellIndex).toBeNull()
+    expect(simulation.player.queuedDirection).toBe(Direction.East)
+
+    updateStageSimulation(simulation, 2.5, { player: 0.4 })
+
+    expect(simulation.player.cellIndex).toBe(1)
+    expect(simulation.player.targetCellIndex).toBeNull()
+  })
+
+  it('allows a committed crossing to finish after its shutter closes', () => {
+    const simulation = createStageSimulation(createFourCellLoop(), {
+      coinIndices: [],
+      shutters: [{ fromCellIndex: 0, toCellIndex: 1, phaseOffsetSeconds: 0 }],
+    })
+
+    queuePlayerDirection(simulation, Direction.East)
+    updateStageSimulation(simulation, 0.5, { player: 1 })
+    expect(simulation.player.progress).toBe(0.5)
+
+    updateStageSimulation(simulation, 4.5, { player: 1 / 9 })
+
+    expect(simulation.player.cellIndex).toBe(1)
+    expect(simulation.player.targetCellIndex).toBeNull()
+    expect(simulation.livesLost).toBe(0)
+  })
+
   it('routes the hunter around active spikes', () => {
     const simulation = createStageSimulation(createFourCellLoop(), {
       hunter: { startCellIndex: 0, releaseDelaySeconds: 0 },
@@ -369,6 +405,21 @@ describe('stage simulation', () => {
     updateStageSimulation(simulation, 0.2, { player: 0, hunter: 5 })
 
     expect(getSpikePhase(simulation.spikes[0], simulation.elapsedSeconds)).toBe(SpikePhase.Active)
+    expect(simulation.hunter?.cellIndex).toBe(2)
+    expect(simulation.livesLost).toBe(0)
+  })
+
+  it('routes the hunter around a closed shutter', () => {
+    const simulation = createStageSimulation(createFourCellLoop(), {
+      hunter: { startCellIndex: 0, releaseDelaySeconds: 0 },
+      shutters: [{ fromCellIndex: 0, toCellIndex: 1, phaseOffsetSeconds: 5 }],
+    })
+    simulation.player.cellIndex = 3
+    simulation.hunter!.active = true
+    simulation.hunter!.releaseStarted = true
+
+    updateStageSimulation(simulation, 0.2, { hunter: 5 })
+
     expect(simulation.hunter?.cellIndex).toBe(2)
     expect(simulation.livesLost).toBe(0)
   })

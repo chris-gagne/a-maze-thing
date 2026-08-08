@@ -24,6 +24,7 @@ import {
 import { calculateStageCoinAward } from '../game/stageScoring'
 import { ENTITY_MOVEMENT_SPEEDS } from '../game/gamePacing'
 import { getSpikePhase, SpikePhase } from '../game/spikeTiming'
+import { getShutterPhase, ShutterPhase } from '../game/shutterTiming'
 import { getStageProfile } from '../game/stageProgression'
 import {
   selectStageIntroduction,
@@ -37,6 +38,7 @@ import { placeLifeTarget } from '../generation/lifeTargetPlacement'
 import { generateMaze, type Maze, Wall } from '../generation/maze'
 import { placePortals } from '../generation/portalPlacement'
 import { placeSpikes } from '../generation/spikePlacement'
+import { placeShutters } from '../generation/shutterPlacement'
 import { placeWanderer } from '../generation/wandererPlacement'
 import { createPixelTextures, TextureKey } from '../presentation/pixelTextures'
 import { getLifeMessage } from '../presentation/lifeMessages'
@@ -117,6 +119,7 @@ export class PlayScene extends Phaser.Scene {
   private retrySeedKey!: Phaser.Input.Keyboard.Key
   private coinSprites = new Map<number, Phaser.GameObjects.Image>()
   private spikeSprites = new Map<number, Phaser.GameObjects.Image>()
+  private shutterSprites: Phaser.GameObjects.Image[] = []
   private loopAnchors: number[] = []
   private ambusherBranchIndices: number[] = []
   private observedLivesLost = 0
@@ -165,6 +168,7 @@ export class PlayScene extends Phaser.Scene {
     this.observedPortalReturnArmed = false
     this.coinSprites.clear()
     this.spikeSprites.clear()
+    this.shutterSprites = []
     this.loopAnchors = []
     this.ambusherBranchIndices = []
     this.hunterSprite = null
@@ -233,6 +237,9 @@ export class PlayScene extends Phaser.Scene {
           stageProfile.hazardDensityMultiplier,
         )
       : []
+    const shutterPlacement = fullGame
+      ? placeShutters(this.maze, this.stageNumber, stageSeed ^ 0x5a477e)
+      : []
     const spikeIndices = new Set(spikePlacement.map((spike) => spike.cellIndex))
     const occupiedIndices = new Set([
       ...portalReservations,
@@ -266,6 +273,7 @@ export class PlayScene extends Phaser.Scene {
           },
       lifeTarget: lifeTargetIndex === null ? undefined : { startCellIndex: lifeTargetIndex },
       spikes: spikePlacement,
+      shutters: shutterPlacement,
       portalIndices,
       lives: this.lives,
     })
@@ -280,6 +288,9 @@ export class PlayScene extends Phaser.Scene {
     const presentFeatureIds: StageFeatureId[] = []
     if (spikePlacement.length > 0) {
       presentFeatureIds.push(StageFeature.Spikes)
+    }
+    if (shutterPlacement.length > 0) {
+      presentFeatureIds.push(StageFeature.Shutters)
     }
     if (lifeTargetIndex !== null) {
       presentFeatureIds.push(StageFeature.ExtraLife)
@@ -473,6 +484,16 @@ export class PlayScene extends Phaser.Scene {
     if (isMazeDebugEnabled()) {
       this.drawMazeDebug()
     }
+
+    this.shutterSprites = this.simulation.shutters.map((shutter) => {
+      const from = this.maze.cells[shutter.fromCellIndex]
+      const to = this.maze.cells[shutter.toCellIndex]
+      return this.add.image(
+        (this.cellCenterX(from.x) + this.cellCenterX(to.x)) / 2,
+        (this.cellCenterY(from.y) + this.cellCenterY(to.y)) / 2,
+        TextureKey.Shutter,
+      ).setDepth(3).setAngle(from.x === to.x ? 90 : 0)
+    })
 
     const portalSprites = [...this.simulation.portals].map((portalIndex) => {
       const cell = this.maze.cells[portalIndex]
@@ -1092,6 +1113,20 @@ export class PlayScene extends Phaser.Scene {
         sprite?.setTint(0x8b454f).setAlpha(0.55)
       }
     }
+
+    this.simulation.shutters.forEach((shutter, index) => {
+      const sprite = this.shutterSprites[index]
+      const phase = getShutterPhase(shutter, this.simulation.elapsedSeconds)
+
+      if (phase === ShutterPhase.Open) {
+        sprite?.setTint(0x1b6970).setAlpha(0.4)
+      } else if (phase === ShutterPhase.Warning) {
+        const pulse = 0.72 + Math.abs(Math.sin(this.simulation.elapsedSeconds * Math.PI * 4)) * 0.28
+        sprite?.setTint(0xffb629).setAlpha(pulse)
+      } else {
+        sprite?.setTint(0xff5364).setAlpha(1)
+      }
+    })
 
     this.updateHud()
   }

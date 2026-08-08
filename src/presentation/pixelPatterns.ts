@@ -6,6 +6,7 @@ export const TextureKey = {
   LifeTarget: 'life-target',
   Player: 'player',
   Portal: 'portal',
+  Shutter: 'shutter',
   Spike: 'spike',
   Wanderer: 'wanderer',
 } as const
@@ -19,6 +20,20 @@ export interface PixelPattern {
 }
 
 export const PIXEL_PATTERNS: Record<TextureKey, PixelPattern> = {
+  [TextureKey.Shutter]: {
+    rows: [
+      '00011000',
+      '00011000',
+      '00011000',
+      '00011000',
+      '00011000',
+      '00011000',
+      '00011000',
+      '00011000',
+    ],
+    palette: { '1': 0xf3fffe },
+    pixelSize: 4,
+  },
   [TextureKey.Wanderer]: {
     rows: [
       '00111100',

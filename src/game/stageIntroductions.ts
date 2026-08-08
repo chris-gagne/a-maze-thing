@@ -1,6 +1,7 @@
 export const StageFeature = {
   CoreBriefing: 'core-briefing',
   Spikes: 'spikes',
+  Shutters: 'shutters',
   ExtraLife: 'extra-life',
   Ambusher: 'ambusher',
   Wanderer: 'wanderer',
@@ -17,6 +18,7 @@ export interface StageIntroduction {
 const FEATURE_ORDER: readonly StageFeatureId[] = [
   StageFeature.CoreBriefing,
   StageFeature.Spikes,
+  StageFeature.Shutters,
   StageFeature.ExtraLife,
   StageFeature.Ambusher,
   StageFeature.Wanderer,
@@ -25,6 +27,7 @@ const FEATURE_ORDER: readonly StageFeatureId[] = [
 const FEATURE_COPY: Readonly<Record<StageFeatureId, string>> = {
   [StageFeature.CoreBriefing]: 'Escape the maze. Hoard coins. Evade the hunter. Find the exit before it finds you.',
   [StageFeature.Spikes]: 'Spikes joined the floor show. Amber warns; coral bites you and blocks enemies.',
+  [StageFeature.Shutters]: 'Maze shutters seal shortcuts. Amber means move; coral means reroute.',
   [StageFeature.ExtraLife]: 'A spare life is loose in the maze. Catch it before it keeps getting away.',
   [StageFeature.Ambusher]: 'Something waits in a deep branch. Expose it, survive the second pursuit, and escape for 25 coins.',
   [StageFeature.Wanderer]: 'A Wanderer may breach the Exit within one minute. Keep your distance and escape while it remains for 25 coins.',

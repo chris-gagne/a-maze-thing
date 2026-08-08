@@ -39,6 +39,13 @@ describe('selectStageIntroduction', () => {
     expect(selectStageIntroduction(4, [StageFeature.ExtraLife], previous)?.lines[0]).toContain('spare life')
   })
 
+  it('introduces shutters only when the stage contains one', () => {
+    const previous: StageFeatureId[] = [StageFeature.CoreBriefing, StageFeature.Spikes]
+    expect(selectStageIntroduction(6, [], previous)).toBeNull()
+    expect(selectStageIntroduction(6, [StageFeature.Shutters], previous)?.lines[0])
+      .toContain('shutters')
+  })
+
   it('combines multiple unseen features in stable registry order', () => {
     const introduction = selectStageIntroduction(
       2,

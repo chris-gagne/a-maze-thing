@@ -37,6 +37,7 @@ export const LEGEND_ENTRIES: readonly LegendEntry[] = [
     textureKey: TextureKey.Spike,
     spikePhases: true,
   },
+  { name: 'Shutters', rule: 'Routes close. Amber gives notice.', textureKey: TextureKey.Shutter },
   { name: 'Portal', rule: 'Back to Start. Reusable.', textureKey: TextureKey.Portal },
   { name: 'Start', rule: 'Return trip to your last portal.', textureKey: null },
 ]

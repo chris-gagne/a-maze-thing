@@ -6,6 +6,7 @@ export function findNextEnemyCellTowardIndex(
   targetIndex: number,
   blockedCellIndices: ReadonlySet<number>,
   getNeighborIndices: (maze: Maze, cellIndex: number) => readonly number[],
+  isEdgeBlocked: (fromIndex: number, toIndex: number) => boolean = () => false,
 ): number | null {
   if (startIndex === targetIndex || blockedCellIndices.has(targetIndex)) {
     return null
@@ -25,6 +26,7 @@ export function findNextEnemyCellTowardIndex(
       if (
         previous[neighborIndex] !== -1
         || (neighborIndex !== startIndex && blockedCellIndices.has(neighborIndex))
+        || isEdgeBlocked(currentIndex, neighborIndex)
       ) {
         continue
       }
