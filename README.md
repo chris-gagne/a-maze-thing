@@ -23,6 +23,7 @@ Create a production build with `npm run build` and run the deterministic test su
 - `Enter`, `Space`, click, or tap: dismiss a stage briefing
 - On game over, `Enter`: start a new run with a fresh seed
 - On game over, `R`: retry the same seed from Stage 1
+- `M` or the masthead speaker button: mute or unmute audio
 
 Movement continues until blocked. The hunter remains dormant until the player starts moving, then follows from the entrance after a short delay.
 
@@ -58,6 +59,10 @@ Each run starts with one life and can hold at most two. The evasive Extra Life i
 Losing the final life opens a persistent run summary with the highest stage reached and total coins recovered. `NEW RUN` generates a pending fresh seed and opens the difficulty selector; the URL updates when a mode is confirmed. `RETRY SEED` restarts Stage 1 with the same generated stage sequence and difficulty. Both reset lives, score, and feature discoveries. Scores are carried only during the active run; saving, history, and leaderboards are deferred.
 
 Some distant dead ends contain reusable portals. Entering one returns the player to the maze entrance while the hunter, collected coins, hazards, and other stage state continue unchanged. After leaving the entrance, a pulsing amber portal dot appears inside the red Start box; returning to Start then sends the player back to the last portal used. A newer portal replaces that return destination, and losing a life clears both the link and dot. Portals affect the player only.
+
+Audio is generated at runtime with the Web Audio API; there are no streamed tracks or external sound assets. A restrained maze pulse shifts from calm to pursuit and danger as enemies activate, while coins, portals, life changes, alerts, and results use short procedural signals. Recurring spike and shutter cues sound only when their phase changes within five walkable tiles, pan toward the hazard, and combine matching simultaneous events to keep late stages readable. Briefings, pause menus, life-loss interruptions, stage transitions, and game over suspend the pulse without replaying missed cues when play resumes.
+
+Browsers keep audio locked until the first pointer or keyboard gesture. The masthead speaker button and `M` toggle mute; that preference persists locally between visits. Muting stops the pulse scheduler and fades the master output rather than changing deterministic simulation timing.
 
 ## Maze progression
 
@@ -103,6 +108,7 @@ Maze debug mode defaults to Easy Peasy timing and skips the difficulty selector.
 
 - `src/generation/`: seeded randomness, perfect-maze foundations, controlled escape loops, final endpoints, dead-end portals, coin placement, and fair spike placement
 - `src/game/`: framework-independent movement, scoring, blocker-aware enemy navigation, hunter pursuit, timed hazards, collision, and seed parsing
+- `src/audio/`: pure simulation observers, persistent settings, and the application-scoped procedural Web Audio engine
 - `src/scenes/`: Phaser input and rendering adapter
 - `src/presentation/`: generated original pixel textures
 
@@ -110,6 +116,6 @@ The deterministic game modules do not depend on Phaser. Rendering runs at the br
 
 ## Current slice
 
-Implemented: four run difficulties, maze-only Casual Mode, scalable gameplay timing, five-band maze growth through Stage 50, increasingly braided route profiles, scrolling late-stage worlds, deterministic post-cap variations, reusable dead-end escape portals, loop-biased coin clusters, continuous buffered movement, optional coins, stage progression, run-scoped feature briefings, one delayed hunter with stable route choices, hidden Stage 11+ Ambushers with a 25-coin survival challenge, seeded Stage 21+ Wanderers with evasion rewards, scarce evasive extra-life targets, telegraphed timed floor spikes, route-changing Stage 6+ Maze Shutters, retained-life respawns, a responsive sprite legend, pixel presentation, and reproducible/debug URLs.
+Implemented: four run difficulties, maze-only Casual Mode, scalable gameplay timing, five-band maze growth through Stage 50, increasingly braided route profiles, scrolling late-stage worlds, deterministic post-cap variations, reusable dead-end escape portals, loop-biased coin clusters, continuous buffered movement, optional coins, stage progression, run-scoped feature briefings, one delayed hunter with stable route choices, hidden Stage 11+ Ambushers with a 25-coin survival challenge, seeded Stage 21+ Wanderers with evasion rewards, scarce evasive extra-life targets, telegraphed timed floor spikes, route-changing Stage 6+ Maze Shutters, retained-life respawns, reactive procedural audio, a responsive sprite legend, pixel presentation, and reproducible/debug URLs.
 
-Next: reactive audio and local leaderboards.
+Next: local leaderboards.

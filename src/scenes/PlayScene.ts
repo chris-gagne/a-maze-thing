@@ -1,4 +1,7 @@
 import Phaser from 'phaser'
+import { StageAudioObserver } from '../audio/StageAudioObserver'
+import { getReactiveAudio } from '../audio/audioRuntime'
+import { AudioCueName, AudioMood } from '../audio/audioTypes'
 import {
   createStageSimulation,
   Direction,
@@ -101,6 +104,8 @@ export class PlayScene extends Phaser.Scene {
   private observedPortalReturnArmed = false
   private maze!: Maze
   private simulation!: StageSimulation
+  private stageAudioObserver: StageAudioObserver | null = null
+  private readonly audio = getReactiveAudio()
   private mazeOrigin = { x: 0, y: MAZE_TOP }
   private hunterSprite: Phaser.GameObjects.Image | null = null
   private ambusherSprite: Phaser.GameObjects.Image | null = null
@@ -165,6 +170,7 @@ export class PlayScene extends Phaser.Scene {
     this.wandererOverlay = null
     this.pauseMenu = null
     this.difficultyMenu = null
+    this.stageAudioObserver = null
     this.observedPortalReturnArmed = false
     this.coinSprites.clear()
     this.spikeSprites.clear()
@@ -189,6 +195,7 @@ export class PlayScene extends Phaser.Scene {
     this.bindInput()
 
     if (this.difficultySelectionRequired) {
+      this.audio?.setMood(AudioMood.Silent)
       this.showDifficultySelector()
       return
     }
@@ -277,6 +284,7 @@ export class PlayScene extends Phaser.Scene {
       portalIndices,
       lives: this.lives,
     })
+    this.stageAudioObserver = new StageAudioObserver(this.simulation)
     const mazeWidth = this.maze.width * CELL_SIZE
     this.mazeOrigin.x = mazeWidth <= GAME_WIDTH
       ? Math.floor((GAME_WIDTH - mazeWidth) / 2)
@@ -311,6 +319,8 @@ export class PlayScene extends Phaser.Scene {
     if (introduction !== null) {
       this.introducedFeatureIds = new Set(introduction.introducedFeatureIds)
       this.showStageIntroduction(introduction)
+    } else {
+      this.refreshAudioMood()
     }
     this.cameras.main.fadeIn(180, 5, 8, 10)
   }
@@ -372,6 +382,7 @@ export class PlayScene extends Phaser.Scene {
         FIXED_STEP_SECONDS * getDifficultyPreset(this.difficulty).simulationSpeedMultiplier,
         ENTITY_MOVEMENT_SPEEDS,
       )
+      this.syncAudioEvents()
       this.accumulator -= FIXED_STEP_SECONDS
 
       if (
@@ -730,6 +741,7 @@ export class PlayScene extends Phaser.Scene {
     window.addEventListener('keydown', this.handleWindowKeyDown)
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       window.removeEventListener('keydown', this.handleWindowKeyDown)
+      this.audio?.setMood(AudioMood.Silent)
     })
   }
 
@@ -851,6 +863,7 @@ export class PlayScene extends Phaser.Scene {
     this.selectedDifficultyIndex = (
       this.selectedDifficultyIndex + offset + DIFFICULTY_PRESETS.length
     ) % DIFFICULTY_PRESETS.length
+    this.audio?.play({ name: AudioCueName.UiMove })
     this.refreshDifficultySelection()
   }
 
@@ -869,6 +882,7 @@ export class PlayScene extends Phaser.Scene {
     }
 
     this.runRestarting = true
+    this.audio?.play({ name: AudioCueName.UiConfirm })
     const difficulty = DIFFICULTY_PRESETS[this.selectedDifficultyIndex].id
     updateRunConfigurationInUrl(this.runSeed, difficulty)
     this.scene.restart({
@@ -889,6 +903,8 @@ export class PlayScene extends Phaser.Scene {
 
     this.accumulator = 0
     this.tweens.pauseAll()
+    this.audio?.play({ name: AudioCueName.Pause })
+    this.audio?.setMood(AudioMood.Silent)
 
     const scrim = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x05080a, 0.76)
       .setOrigin(0)
@@ -940,6 +956,8 @@ export class PlayScene extends Phaser.Scene {
     this.pauseMenu = null
     this.tweens.resumeAll()
     this.accumulator = 0
+    this.audio?.play({ name: AudioCueName.Resume })
+    this.refreshAudioMood()
   }
 
   private createPauseActionButton(
@@ -968,6 +986,7 @@ export class PlayScene extends Phaser.Scene {
   }
 
   private showStageIntroduction(introduction: StageIntroduction): void {
+    this.audio?.setMood(AudioMood.Silent)
     const eyebrow = this.add.text(0, 0, `STAGE ${String(this.stageNumber).padStart(2, '0')}`, {
       fontFamily: '"Press Start 2P"',
       fontSize: '12px',
@@ -1026,6 +1045,8 @@ export class PlayScene extends Phaser.Scene {
     this.stageIntroduction.destroy(true)
     this.stageIntroduction = null
     this.accumulator = 0
+    this.audio?.play({ name: AudioCueName.UiConfirm })
+    this.refreshAudioMood()
   }
 
   private captureDirectionInput(): void {
@@ -1131,6 +1152,25 @@ export class PlayScene extends Phaser.Scene {
     this.updateHud()
   }
 
+  private syncAudioEvents(): void {
+    if (this.stageAudioObserver === null || this.audio === null) {
+      return
+    }
+
+    const update = this.stageAudioObserver.observe(this.simulation)
+    for (const cue of update.cues) {
+      this.audio.play(cue)
+    }
+    this.audio.setMood(update.mood)
+  }
+
+  private refreshAudioMood(): void {
+    if (this.stageAudioObserver === null || this.audio === null) {
+      return
+    }
+    this.audio.setMood(this.stageAudioObserver.observe(this.simulation).mood)
+  }
+
   private syncAmbusherEvents(): void {
     if (this.simulation.ambusherReveals <= this.observedAmbusherReveals) {
       return
@@ -1139,6 +1179,7 @@ export class PlayScene extends Phaser.Scene {
     this.observedAmbusherReveals = this.simulation.ambusherReveals
     this.accumulator = 0
     this.tweens.pauseAll()
+    this.audio?.setMood(AudioMood.Silent)
     const panel = this.add.rectangle(0, 0, 520, 190, 0x05080a, 0.97)
     panel.setStrokeStyle(4, 0xffb629, 1)
     const headline = this.add.text(0, -34, 'AMBUSH!', {
@@ -1161,6 +1202,7 @@ export class PlayScene extends Phaser.Scene {
       this.ambushOverlay = null
       this.tweens.resumeAll()
       this.accumulator = 0
+      this.refreshAudioMood()
     })
   }
 
@@ -1175,6 +1217,7 @@ export class PlayScene extends Phaser.Scene {
     this.observedWandererTriggers = this.simulation.wandererTriggers
     this.accumulator = 0
     this.tweens.pauseAll()
+    this.audio?.setMood(AudioMood.Silent)
 
     const panel = this.add.rectangle(0, 0, 620, 190, 0x05080a, 0.97)
     panel.setStrokeStyle(4, 0x9d7bff, 1)
@@ -1201,6 +1244,7 @@ export class PlayScene extends Phaser.Scene {
       this.wandererOverlay = null
       this.tweens.resumeAll()
       this.accumulator = 0
+      this.refreshAudioMood()
     })
   }
 
@@ -1226,6 +1270,7 @@ export class PlayScene extends Phaser.Scene {
     if (source === null) {
       throw new Error('A lost life must record its damage source.')
     }
+    this.audio?.setMood(AudioMood.Silent)
 
     const panel = this.add.rectangle(0, 0, 560, 210, 0x05080a, 0.97)
     panel.setStrokeStyle(4, 0xff5364, 1)
@@ -1255,6 +1300,7 @@ export class PlayScene extends Phaser.Scene {
       this.respawnOverlay?.destroy(true)
       this.respawnOverlay = null
       this.accumulator = 0
+      this.refreshAudioMood()
     })
   }
 

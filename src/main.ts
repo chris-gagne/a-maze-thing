@@ -2,6 +2,9 @@ import '@fontsource/press-start-2p/400.css'
 import '@fontsource-variable/space-grotesk'
 import Phaser from 'phaser'
 import './style.css'
+import { ProceduralAudioEngine } from './audio/ProceduralAudioEngine'
+import { provideReactiveAudio } from './audio/audioRuntime'
+import { loadAudioSettings, saveAudioSettings, type StorageAdapter } from './audio/audioSettings'
 import { initializeSpriteLegend } from './presentation/spriteLegend'
 import { GAME_HEIGHT, GAME_WIDTH, PlayScene } from './scenes/PlayScene'
 
@@ -14,9 +17,19 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
         <h1>A-MAZE-THING</h1>
       </div>
     </div>
-    <div class="signal" aria-label="Game status">
-      <span class="signal-light" aria-hidden="true"></span>
-      SYSTEM READY
+    <div class="masthead-actions">
+      <div class="signal" aria-label="Game status">
+        <span class="signal-light" aria-hidden="true"></span>
+        SYSTEM READY
+      </div>
+      <button class="audio-toggle" type="button" aria-label="Mute audio" aria-pressed="false" title="Mute audio (M)">
+        <span class="audio-toggle-icon" aria-hidden="true">
+          <span class="audio-toggle-speaker"></span>
+          <span class="audio-toggle-wave audio-toggle-wave--near"></span>
+          <span class="audio-toggle-wave audio-toggle-wave--far"></span>
+          <span class="audio-toggle-muted-mark"></span>
+        </span>
+      </button>
     </div>
   </header>
   <div class="play-layout">
@@ -45,6 +58,42 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
   </footer>
 `
 
+const storage = getStorage()
+const audio = new ProceduralAudioEngine(loadAudioSettings(storage).muted)
+provideReactiveAudio(audio)
+const audioButton = document.querySelector<HTMLButtonElement>('.audio-toggle')!
+
+const updateAudioButton = (): void => {
+  const muted = audio.isMuted()
+  audioButton.classList.toggle('audio-toggle--muted', muted)
+  audioButton.setAttribute('aria-pressed', String(muted))
+  audioButton.setAttribute('aria-label', muted ? 'Unmute audio' : 'Mute audio')
+  audioButton.title = `${muted ? 'Unmute' : 'Mute'} audio (M)`
+}
+const unlockAudio = (): void => {
+  void audio.unlock().catch(() => undefined)
+}
+const toggleAudio = (): void => {
+  audio.setMuted(!audio.isMuted())
+  saveAudioSettings(storage, { muted: audio.isMuted() })
+  updateAudioButton()
+}
+const handleAudioButton = (): void => {
+  unlockAudio()
+  toggleAudio()
+}
+const handleAudioKey = (event: KeyboardEvent): void => {
+  if (event.key.toLowerCase() !== 'm' || event.repeat) return
+  event.preventDefault()
+  toggleAudio()
+}
+
+updateAudioButton()
+audioButton.addEventListener('click', handleAudioButton)
+window.addEventListener('pointerdown', unlockAudio, { once: true, capture: true })
+window.addEventListener('keydown', unlockAudio, { once: true, capture: true })
+window.addEventListener('keydown', handleAudioKey)
+
 const legendDetails = document.querySelector<HTMLDetailsElement>('.legend-disclosure')!
 const disposeLegend = initializeSpriteLegend(legendDetails)
 
@@ -72,7 +121,20 @@ const game = new Phaser.Game({
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
+    audioButton.removeEventListener('click', handleAudioButton)
+    window.removeEventListener('pointerdown', unlockAudio, { capture: true })
+    window.removeEventListener('keydown', unlockAudio, { capture: true })
+    window.removeEventListener('keydown', handleAudioKey)
+    audio.dispose()
     disposeLegend()
     game.destroy(true)
   })
+}
+
+function getStorage(): StorageAdapter | null {
+  try {
+    return window.localStorage
+  } catch {
+    return null
+  }
 }

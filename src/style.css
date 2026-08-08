@@ -99,6 +99,129 @@ h1 {
   letter-spacing: 0;
 }
 
+.masthead-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 0 0 auto;
+}
+
+.audio-toggle {
+  width: 38px;
+  height: 38px;
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid #28545c;
+  border-radius: 4px;
+  color: var(--cyan);
+  background: #081216;
+  cursor: pointer;
+}
+
+.audio-toggle:hover {
+  border-color: var(--cyan);
+  background: #0c1d22;
+}
+
+.audio-toggle:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 3px;
+}
+
+.audio-toggle-icon {
+  width: 22px;
+  height: 20px;
+  position: relative;
+  display: block;
+}
+
+.audio-toggle-speaker {
+  width: 7px;
+  height: 8px;
+  position: absolute;
+  top: 6px;
+  left: 0;
+  display: block;
+  background: currentColor;
+}
+
+.audio-toggle-speaker::after {
+  position: absolute;
+  top: -4px;
+  left: 5px;
+  border-top: 8px solid transparent;
+  border-right: 8px solid currentColor;
+  border-bottom: 8px solid transparent;
+  content: '';
+}
+
+.audio-toggle-wave {
+  position: absolute;
+  display: block;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  border-bottom-color: transparent;
+  border-left-color: transparent;
+  border-radius: 50%;
+}
+
+.audio-toggle-wave--near {
+  width: 8px;
+  height: 12px;
+  top: 4px;
+  right: 3px;
+}
+
+.audio-toggle-wave--far {
+  width: 13px;
+  height: 18px;
+  top: 1px;
+  right: -1px;
+}
+
+.audio-toggle-muted-mark {
+  width: 18px;
+  height: 18px;
+  position: absolute;
+  top: 1px;
+  right: -1px;
+  display: none;
+}
+
+.audio-toggle-muted-mark::before,
+.audio-toggle-muted-mark::after {
+  width: 21px;
+  height: 3px;
+  position: absolute;
+  top: 8px;
+  left: -1px;
+  background: var(--coral);
+  content: '';
+}
+
+.audio-toggle-muted-mark::before {
+  transform: rotate(45deg);
+}
+
+.audio-toggle-muted-mark::after {
+  transform: rotate(-45deg);
+}
+
+.audio-toggle--muted {
+  color: var(--muted);
+}
+
+.audio-toggle--muted .audio-toggle-wave {
+  display: none;
+}
+
+.audio-toggle--muted .audio-toggle-muted-mark {
+  display: block;
+}
+
 .signal-light {
   width: 8px;
   height: 8px;
@@ -373,6 +496,11 @@ h1 {
 
   .signal {
     display: none;
+  }
+
+  .audio-toggle {
+    width: 34px;
+    height: 34px;
   }
 
   .system-footer {
