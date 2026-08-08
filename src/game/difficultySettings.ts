@@ -48,6 +48,16 @@ export const DIFFICULTY_PRESETS: readonly DifficultyPreset[] = [
 
 export const DEFAULT_DIFFICULTY = Difficulty.Normal
 
+export function resolveDifficulty(
+  sceneDifficulty: DifficultyId | undefined,
+  requestedDifficulty: DifficultyId | null,
+  debugMode: boolean,
+): DifficultyId {
+  return sceneDifficulty
+    ?? requestedDifficulty
+    ?? (debugMode ? Difficulty.EasyPeasy : DEFAULT_DIFFICULTY)
+}
+
 export function parseDifficulty(value: string | null): DifficultyId | null {
   return DIFFICULTY_PRESETS.find((preset) => preset.id === value)?.id ?? null
 }

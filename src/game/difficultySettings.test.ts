@@ -5,6 +5,7 @@ import {
   Difficulty,
   getDifficultyPreset,
   parseDifficulty,
+  resolveDifficulty,
 } from './difficultySettings'
 
 describe('difficulty settings', () => {
@@ -21,6 +22,14 @@ describe('difficulty settings', () => {
     expect(parseDifficulty('')).toBeNull()
     expect(parseDifficulty('NORMAL')).toBeNull()
     expect(parseDifficulty('regular')).toBeNull()
+  })
+
+  it('uses Easy Peasy as a debug default without overriding explicit difficulty', () => {
+    expect(resolveDifficulty(undefined, null, true)).toBe(Difficulty.EasyPeasy)
+    expect(resolveDifficulty(undefined, Difficulty.Normal, true)).toBe(Difficulty.Normal)
+    expect(resolveDifficulty(Difficulty.Overclocked, Difficulty.Normal, true))
+      .toBe(Difficulty.Overclocked)
+    expect(resolveDifficulty(undefined, null, false)).toBe(DEFAULT_DIFFICULTY)
   })
 
   it('defines the four modes in selector order with approved copy', () => {

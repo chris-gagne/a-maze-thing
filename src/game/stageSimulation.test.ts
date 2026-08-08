@@ -22,6 +22,7 @@ import {
   updateStageSimulation,
 } from './stageSimulation'
 import { DamageSource, INITIAL_LIVES, MAX_LIVES } from './lifeRules'
+import { ENTITY_MOVEMENT_SPEEDS } from './gamePacing'
 
 describe('stage simulation', () => {
   it('starts with one life and rejects values outside the one-to-two range', () => {
@@ -41,7 +42,7 @@ describe('stage simulation', () => {
       .find((direction) => {
         const before = simulation.player.cellIndex
         queuePlayerDirection(simulation, direction)
-        updateStageSimulation(simulation, 0.1, 1)
+        updateStageSimulation(simulation, 0.1, { player: 1 })
         const blocked = simulation.player.cellIndex === before && simulation.player.targetCellIndex === null
         simulation.player.queuedDirection = null
         return blocked
@@ -60,9 +61,9 @@ describe('stage simulation', () => {
     const secondDirection = directionBetween(maze, route[1], route[2])
 
     queuePlayerDirection(simulation, firstDirection)
-    updateStageSimulation(simulation, 0.25, 2)
+    updateStageSimulation(simulation, 0.25, { player: 2 })
     queuePlayerDirection(simulation, secondDirection)
-    updateStageSimulation(simulation, 0.75, 2)
+    updateStageSimulation(simulation, 0.75, { player: 2 })
 
     expect(simulation.player.cellIndex).toBe(route[2])
     expect(simulation.player.direction).toBe(secondDirection)
@@ -77,7 +78,7 @@ describe('stage simulation', () => {
 
     for (let index = 1; index < route.length; index += 1) {
       queuePlayerDirection(simulation, directionBetween(maze, route[index - 1], route[index]))
-      updateStageSimulation(simulation, 1, 1)
+      updateStageSimulation(simulation, 1, { player: 1 })
     }
 
     expect(simulation.complete).toBe(true)
@@ -94,7 +95,7 @@ describe('stage simulation', () => {
 
     for (let index = 1; index < route.length; index += 1) {
       queuePlayerDirection(simulation, directionBetween(maze, route[index - 1], route[index]))
-      updateStageSimulation(simulation, 1, 1)
+      updateStageSimulation(simulation, 1, { player: 1 })
     }
 
     expect(simulation.coins.size).toBe(0)
@@ -117,7 +118,7 @@ describe('stage simulation', () => {
     })
     queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
 
-    updateStageSimulation(simulation, 0.4 * multiplier, 1, 0.1)
+    updateStageSimulation(simulation, 0.4 * multiplier, { player: 1, hunter: 0.1 })
 
     expect(simulation.elapsedSeconds).toBeCloseTo(0.4 * multiplier)
     expect(simulation.player.progress).toBeCloseTo(0.4 * multiplier)
@@ -132,15 +133,15 @@ describe('stage simulation', () => {
       hunter: { startCellIndex: entranceIndex, releaseDelaySeconds: 0.5 },
     })
 
-    updateStageSimulation(simulation, 0.5, 0, 2)
+    updateStageSimulation(simulation, 0.5, { player: 0, hunter: 2 })
     expect(simulation.hunter?.active).toBe(false)
 
     queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
-    updateStageSimulation(simulation, 0.2, 5, 2)
+    updateStageSimulation(simulation, 0.2, { player: 5, hunter: 2 })
     expect(simulation.player.cellIndex).toBe(route[1])
     expect(simulation.hunter?.active).toBe(false)
 
-    updateStageSimulation(simulation, 0.8, 0, 2)
+    updateStageSimulation(simulation, 0.8, { player: 0, hunter: 2 })
     expect(simulation.hunter?.active).toBe(true)
     expect(getHunterGridPosition(simulation)).toEqual(getPlayerGridPosition(simulation))
     expect(simulation.gameOver).toBe(true)
@@ -154,11 +155,11 @@ describe('stage simulation', () => {
       ambusher: { startCellIndex: route[6] },
     })
 
-    updateStageSimulation(simulation, 0.1, 0, 0, 0, 1)
+    updateStageSimulation(simulation, 0.1, { player: 0, hunter: 0, lifeTarget: 0, ambusher: 1 })
     expect(simulation.ambusher?.revealed).toBe(false)
 
     queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
-    updateStageSimulation(simulation, 1, 1, 0, 0, 1)
+    updateStageSimulation(simulation, 1, { player: 1, hunter: 0, lifeTarget: 0, ambusher: 1 })
 
     expect(simulation.player.cellIndex).toBe(route[1])
     expect(simulation.player.targetCellIndex).toBeNull()
@@ -178,8 +179,8 @@ describe('stage simulation', () => {
     })
 
     queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
-    updateStageSimulation(simulation, 1, 1, 0, 0, 1)
-    updateStageSimulation(simulation, 1, 0, 0, 0, 1)
+    updateStageSimulation(simulation, 1, { player: 1, hunter: 0, lifeTarget: 0, ambusher: 1 })
+    updateStageSimulation(simulation, 1, { player: 0, hunter: 0, lifeTarget: 0, ambusher: 1 })
 
     expect(simulation.ambusher?.cellIndex).toBe(route[5])
     expect(getAmbusherGridPosition(simulation)).toEqual({
@@ -201,7 +202,7 @@ describe('stage simulation', () => {
     simulation.ambusher!.active = true
     simulation.ambusher!.cellIndex = entranceIndex
 
-    updateStageSimulation(simulation, 0.1, 0, 0, 0, 0)
+    updateStageSimulation(simulation, 0.1, { player: 0, hunter: 0, lifeTarget: 0, ambusher: 0 })
 
     expect(simulation.lives).toBe(1)
     expect(simulation.lastDamageSource).toBe(DamageSource.Ambusher)
@@ -227,15 +228,15 @@ describe('stage simulation', () => {
       },
     })
 
-    updateStageSimulation(simulation, 0.9, 0, 0, 0, 0, 0)
+    updateStageSimulation(simulation, 0.9, { player: 0, hunter: 0, lifeTarget: 0, ambusher: 0, wanderer: 0 })
     expect(getWandererGridPosition(simulation)).toBeNull()
 
-    updateStageSimulation(simulation, 0.1, 0, 0, 0, 0, 0)
+    updateStageSimulation(simulation, 0.1, { player: 0, hunter: 0, lifeTarget: 0, ambusher: 0, wanderer: 0 })
     expect(simulation.wandererSpawns).toBe(1)
     expect(simulation.wandererTriggers).toBe(0)
 
     queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
-    updateStageSimulation(simulation, 1, 1, 0, 0, 0, 0)
+    updateStageSimulation(simulation, 1, { player: 1, hunter: 0, lifeTarget: 0, ambusher: 0, wanderer: 0 })
 
     expect(simulation.wanderer?.triggered).toBe(true)
     expect(simulation.wandererTriggers).toBe(1)
@@ -257,7 +258,7 @@ describe('stage simulation', () => {
       },
     })
 
-    updateStageSimulation(simulation, 0.5, 0, 0, 0, 0, 1.5)
+    updateStageSimulation(simulation, 0.5, { player: 0, hunter: 0, lifeTarget: 0, ambusher: 0, wanderer: 1.5 })
 
     expect(simulation.wandererSpawns).toBe(1)
     expect(simulation.wandererTriggers).toBe(1)
@@ -278,7 +279,7 @@ describe('stage simulation', () => {
     })
     simulation.player.cellIndex = route[8]
 
-    updateStageSimulation(simulation, 1, 0, 0, 0, 0, 1)
+    updateStageSimulation(simulation, 1, { player: 0, hunter: 0, lifeTarget: 0, ambusher: 0, wanderer: 1 })
 
     expect(simulation.wanderer?.departed).toBe(true)
     expect(getWandererGridPosition(simulation)).toBeNull()
@@ -303,7 +304,7 @@ describe('stage simulation', () => {
       routeDecisionCount: 4,
     })
 
-    updateStageSimulation(simulation, 0.1, 0, 0, 0, 0, 0)
+    updateStageSimulation(simulation, 0.1, { player: 0, hunter: 0, lifeTarget: 0, ambusher: 0, wanderer: 0 })
 
     expect(simulation.lives).toBe(1)
     expect(simulation.lastDamageSource).toBe(DamageSource.Wanderer)
@@ -326,14 +327,14 @@ describe('stage simulation', () => {
     })
 
     queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
-    updateStageSimulation(simulation, 0.2, 5, 2)
+    updateStageSimulation(simulation, 0.2, { player: 5, hunter: 2 })
     queuePlayerDirection(simulation, directionBetween(maze, route[1], route[0]))
-    updateStageSimulation(simulation, 0.2, 5, 2)
+    updateStageSimulation(simulation, 0.2, { player: 5, hunter: 2 })
 
     expect(simulation.player.cellIndex).toBe(entranceIndex)
     expect(simulation.hunter?.releaseStarted).toBe(true)
 
-    updateStageSimulation(simulation, 0.2, 0, 2)
+    updateStageSimulation(simulation, 0.2, { player: 0, hunter: 2 })
     expect(simulation.hunter?.active).toBe(true)
     expect(simulation.gameOver).toBe(true)
   })
@@ -344,7 +345,7 @@ describe('stage simulation', () => {
     })
     simulation.hunter!.releaseStarted = true
 
-    updateStageSimulation(simulation, 1, 0, 1)
+    updateStageSimulation(simulation, 1, { player: 0, hunter: 1 })
 
     expect(HUNTER_DIRECTION_PRIORITY).toEqual([
       Direction.North,
@@ -365,7 +366,7 @@ describe('stage simulation', () => {
     simulation.hunter!.active = true
     simulation.hunter!.releaseStarted = true
 
-    updateStageSimulation(simulation, 0.2, 0, 5)
+    updateStageSimulation(simulation, 0.2, { player: 0, hunter: 5 })
 
     expect(getSpikePhase(simulation.spikes[0], simulation.elapsedSeconds)).toBe(SpikePhase.Active)
     expect(simulation.hunter?.cellIndex).toBe(2)
@@ -385,7 +386,7 @@ describe('stage simulation', () => {
     simulation.hunter!.active = true
     simulation.hunter!.releaseStarted = true
 
-    updateStageSimulation(simulation, 1, 0, 1)
+    updateStageSimulation(simulation, 1, { player: 0, hunter: 1 })
 
     expect(simulation.hunter?.cellIndex).toBe(1)
     expect(simulation.livesLost).toBe(0)
@@ -400,11 +401,11 @@ describe('stage simulation', () => {
     simulation.hunter!.active = true
     simulation.hunter!.releaseStarted = true
 
-    updateStageSimulation(simulation, 0.2, 0, 1)
+    updateStageSimulation(simulation, 0.2, { player: 0, hunter: 1 })
     expect(simulation.hunter?.targetCellIndex).toBe(1)
     expect(simulation.hunter?.progress).toBeCloseTo(0.2)
 
-    updateStageSimulation(simulation, 0.8, 0, 1)
+    updateStageSimulation(simulation, 0.8, { player: 0, hunter: 1 })
 
     expect(getSpikePhase(simulation.spikes[0], simulation.elapsedSeconds)).toBe(SpikePhase.Active)
     expect(simulation.hunter?.cellIndex).toBe(1)
@@ -420,11 +421,11 @@ describe('stage simulation', () => {
     simulation.hunter!.active = true
     simulation.hunter!.releaseStarted = true
 
-    updateStageSimulation(simulation, 0.2, 0, 1)
+    updateStageSimulation(simulation, 0.2, { player: 0, hunter: 1 })
     expect(simulation.hunter?.cellIndex).toBe(0)
     expect(simulation.hunter?.targetCellIndex).toBeNull()
 
-    updateStageSimulation(simulation, 0.6, 0, 1)
+    updateStageSimulation(simulation, 0.6, { player: 0, hunter: 1 })
 
     expect(getSpikePhase(simulation.spikes[0], simulation.elapsedSeconds)).toBe(SpikePhase.Recovery)
     expect(simulation.hunter?.targetCellIndex).toBe(1)
@@ -440,7 +441,7 @@ describe('stage simulation', () => {
     simulation.hunter!.active = true
     simulation.hunter!.releaseStarted = true
 
-    updateStageSimulation(simulation, 0.2, 0, 1)
+    updateStageSimulation(simulation, 0.2, { player: 0, hunter: 1 })
 
     expect(simulation.hunter?.cellIndex).toBe(1)
     expect(simulation.hunter?.targetCellIndex).toBe(2)
@@ -460,7 +461,7 @@ describe('stage simulation', () => {
 
       for (let index = 1; index < route.length && !simulation.gameOver; index += 1) {
         queuePlayerDirection(simulation, directionBetween(maze, route[index - 1], route[index]))
-        updateStageSimulation(simulation, 0.2, 5, 3.25)
+        updateStageSimulation(simulation, 1 / ENTITY_MOVEMENT_SPEEDS.player, ENTITY_MOVEMENT_SPEEDS)
       }
 
       expect(simulation.gameOver, `seed ${seed}`).toBe(false)
@@ -480,10 +481,10 @@ describe('stage simulation', () => {
     simulation.hunter!.releaseStarted = true
 
     queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
-    updateStageSimulation(simulation, 0.2, 5, 0)
+    updateStageSimulation(simulation, 0.2, { player: 5, hunter: 0 })
     expect(simulation.collectedCoins).toBe(1)
 
-    updateStageSimulation(simulation, 0.5, 0, 2)
+    updateStageSimulation(simulation, 0.5, { player: 0, hunter: 2 })
 
     expect(simulation.lives).toBe(1)
     expect(simulation.livesLost).toBe(1)
@@ -504,8 +505,8 @@ describe('stage simulation', () => {
     })
 
     queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
-    updateStageSimulation(simulation, 0.2, 5)
-    updateStageSimulation(simulation, 1, 0)
+    updateStageSimulation(simulation, 0.2, { player: 5 })
+    updateStageSimulation(simulation, 1, { player: 0 })
 
     expect(simulation.lives).toBe(2)
     expect(simulation.livesGained).toBe(1)
@@ -521,7 +522,7 @@ describe('stage simulation', () => {
     })
 
     simulation.player.cellIndex = 1
-    updateStageSimulation(simulation, 0.1, 0)
+    updateStageSimulation(simulation, 0.1, { player: 0 })
 
     expect(simulation.lives).toBe(MAX_LIVES)
     expect(simulation.livesGained).toBe(0)
@@ -534,7 +535,7 @@ describe('stage simulation', () => {
       lifeTarget: { startCellIndex: 1 },
     })
 
-    updateStageSimulation(simulation, 1, 0, 0, 1)
+    updateStageSimulation(simulation, 1, { player: 0, hunter: 0, lifeTarget: 1 })
 
     expect(simulation.lifeTarget?.cellIndex).toBe(2)
     expect(getLifeTargetGridPosition(simulation)).toEqual({ x: 2, y: 0 })
@@ -549,7 +550,7 @@ describe('stage simulation', () => {
     const visitedCells: number[] = []
 
     for (let update = 0; update < 3; update += 1) {
-      updateStageSimulation(simulation, 1, 0, 0, 1)
+      updateStageSimulation(simulation, 1, { player: 0, hunter: 0, lifeTarget: 1 })
       visitedCells.push(simulation.lifeTarget!.cellIndex)
     }
 
@@ -581,7 +582,7 @@ describe('stage simulation', () => {
     })
 
     queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
-    updateStageSimulation(simulation, 0.2, 5)
+    updateStageSimulation(simulation, 0.2, { player: 5 })
 
     expect(getSpikePhase(simulation.spikes[0], simulation.elapsedSeconds)).toBe(SpikePhase.Warning)
     expect(simulation.lives).toBe(2)
@@ -600,7 +601,7 @@ describe('stage simulation', () => {
     })
 
     queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
-    updateStageSimulation(simulation, 0.2, 5)
+    updateStageSimulation(simulation, 0.2, { player: 5 })
 
     expect(getSpikePhase(simulation.spikes[0], simulation.elapsedSeconds)).toBe(SpikePhase.Active)
     expect(simulation.lives).toBe(1)
@@ -621,7 +622,7 @@ describe('stage simulation', () => {
     })
 
     queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
-    updateStageSimulation(simulation, 0.2, 5)
+    updateStageSimulation(simulation, 0.2, { player: 5 })
 
     expect(simulation.lives).toBe(0)
     expect(simulation.livesLost).toBe(1)
@@ -640,7 +641,7 @@ describe('stage simulation', () => {
     simulation.hunter!.active = true
     simulation.hunter!.releaseStarted = true
 
-    updateStageSimulation(simulation, 0.1, 0, 0)
+    updateStageSimulation(simulation, 0.1, { player: 0, hunter: 0 })
 
     expect(simulation.lives).toBe(1)
     expect(simulation.livesLost).toBe(1)
@@ -663,7 +664,7 @@ describe('stage simulation', () => {
 
     for (let use = 1; use <= 2; use += 1) {
       queuePlayerDirection(simulation, Direction.East)
-      updateStageSimulation(simulation, 2, 1)
+      updateStageSimulation(simulation, 2, { player: 1 })
 
       expect(simulation.player.cellIndex).toBe(0)
       expect(simulation.player.targetCellIndex).toBeNull()
@@ -691,13 +692,13 @@ describe('stage simulation', () => {
       portalIndices: [1],
     })
 
-    updateStageSimulation(simulation, 1, 0, 0, 1)
+    updateStageSimulation(simulation, 1, { player: 0, hunter: 0, lifeTarget: 1 })
     expect(simulation.lifeTarget?.cellIndex).toBe(1)
     expect(simulation.portalUses).toBe(0)
 
     const ordinarySimulation = createStageSimulation(maze)
     queuePlayerDirection(ordinarySimulation, Direction.East)
-    updateStageSimulation(ordinarySimulation, 1, 1)
+    updateStageSimulation(ordinarySimulation, 1, { player: 1 })
     expect(ordinarySimulation.player.cellIndex).toBe(1)
     expect(ordinarySimulation.portalUses).toBe(0)
   })
@@ -707,7 +708,7 @@ describe('stage simulation', () => {
     const simulation = createStageSimulation(maze, { portalIndices: [2] })
 
     queuePlayerDirection(simulation, Direction.East)
-    updateStageSimulation(simulation, 2, 1)
+    updateStageSimulation(simulation, 2, { player: 1 })
 
     expect(simulation.player.cellIndex).toBe(0)
     expect(simulation.lastUsedPortalCellIndex).toBe(2)
@@ -715,17 +716,17 @@ describe('stage simulation', () => {
     expect(simulation.portalUses).toBe(1)
 
     queuePlayerDirection(simulation, Direction.North)
-    updateStageSimulation(simulation, 0.5, 1)
+    updateStageSimulation(simulation, 0.5, { player: 1 })
     expect(simulation.player.cellIndex).toBe(0)
     expect(simulation.portalReturnArmed).toBe(false)
 
     queuePlayerDirection(simulation, Direction.East)
-    updateStageSimulation(simulation, 0.5, 1)
+    updateStageSimulation(simulation, 0.5, { player: 1 })
     expect(simulation.portalReturnArmed).toBe(true)
     expect(getPlayerGridPosition(simulation)).toEqual({ x: 0.5, y: 0 })
 
     queuePlayerDirection(simulation, Direction.West)
-    updateStageSimulation(simulation, 1.5, 1)
+    updateStageSimulation(simulation, 1.5, { player: 1 })
 
     expect(simulation.player.cellIndex).toBe(2)
     expect(simulation.player.targetCellIndex).toBeNull()
@@ -737,7 +738,7 @@ describe('stage simulation', () => {
     expect(simulation.portalUses).toBe(2)
 
     queuePlayerDirection(simulation, Direction.West)
-    updateStageSimulation(simulation, 2, 1)
+    updateStageSimulation(simulation, 2, { player: 1 })
     expect(simulation.player.cellIndex).toBe(2)
     expect(simulation.portalUses).toBe(3)
   })
@@ -747,11 +748,11 @@ describe('stage simulation', () => {
     const simulation = createStageSimulation(maze, { portalIndices: [2, 3] })
 
     queuePlayerDirection(simulation, Direction.East)
-    updateStageSimulation(simulation, 2, 1)
+    updateStageSimulation(simulation, 2, { player: 1 })
     expect(simulation.lastUsedPortalCellIndex).toBe(2)
 
     queuePlayerDirection(simulation, Direction.South)
-    updateStageSimulation(simulation, 1, 1)
+    updateStageSimulation(simulation, 1, { player: 1 })
 
     expect(simulation.player.cellIndex).toBe(0)
     expect(simulation.lastUsedPortalCellIndex).toBe(3)
@@ -773,7 +774,7 @@ describe('stage simulation', () => {
     simulation.hunter!.releaseStarted = true
 
     queuePlayerDirection(simulation, Direction.West)
-    updateStageSimulation(simulation, 1, 1)
+    updateStageSimulation(simulation, 1, { player: 1 })
 
     expect(simulation.portalUses).toBe(1)
     expect(simulation.lives).toBe(1)

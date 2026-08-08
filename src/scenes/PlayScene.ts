@@ -16,12 +16,13 @@ import { INITIAL_LIVES } from '../game/lifeRules'
 import {
   DEFAULT_DIFFICULTY,
   DIFFICULTY_PRESETS,
-  Difficulty,
   getDifficultyPreset,
   parseDifficulty,
+  resolveDifficulty,
   type DifficultyId,
 } from '../game/difficultySettings'
 import { calculateStageCoinAward } from '../game/stageScoring'
+import { ENTITY_MOVEMENT_SPEEDS } from '../game/gamePacing'
 import { getSpikePhase, SpikePhase } from '../game/spikeTiming'
 import { getStageProfile } from '../game/stageProgression'
 import {
@@ -46,14 +47,10 @@ export const GAME_HEIGHT = 720
 const CELL_SIZE = 48
 const MAZE_TOP = 128
 const FIXED_STEP_SECONDS = 1 / 120
-const PLAYER_SPEED = 5
-const HUNTER_SPEED = 3.25
 const HUNTER_RELEASE_DELAY_SECONDS = 2.4
-const LIFE_TARGET_SPEED = 3
 const RESPAWN_PAUSE_MILLISECONDS = 1250
 const AMBUSH_PAUSE_MILLISECONDS = 1000
 const WANDERER_PAUSE_MILLISECONDS = 1000
-const WANDERER_SPEED = 1.5
 const DIFFICULTY_COLORS: Readonly<Record<DifficultyId, number>> = {
   casual: 0x79f25f,
   'easy-peasy': 0x42e8df,
@@ -147,9 +144,7 @@ export class PlayScene extends Phaser.Scene {
     this.runSeed = data.runSeed ?? requestedSeed ?? createRandomRunSeed()
     this.lives = data.lives ?? INITIAL_LIVES
     this.stageEntryLives = this.lives
-    this.difficulty = debugMode
-      ? Difficulty.EasyPeasy
-      : data.difficulty ?? requestedDifficulty ?? DEFAULT_DIFFICULTY
+    this.difficulty = resolveDifficulty(data.difficulty, requestedDifficulty, debugMode)
     this.difficultySelectionRequired = data.selectDifficulty
       ?? (!debugMode && data.difficulty === undefined && (requestedSeed === null || requestedDifficulty === null))
     this.selectedDifficultyIndex = DIFFICULTY_PRESETS.findIndex((preset) => {
@@ -364,11 +359,7 @@ export class PlayScene extends Phaser.Scene {
       updateStageSimulation(
         this.simulation,
         FIXED_STEP_SECONDS * getDifficultyPreset(this.difficulty).simulationSpeedMultiplier,
-        PLAYER_SPEED,
-        HUNTER_SPEED,
-        WANDERER_SPEED,
-        LIFE_TARGET_SPEED,
-        HUNTER_SPEED,
+        ENTITY_MOVEMENT_SPEEDS,
       )
       this.accumulator -= FIXED_STEP_SECONDS
 

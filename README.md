@@ -35,6 +35,8 @@ Movement continues until blocked. The hunter remains dormant until the player st
 
 The first run and every `NEW RUN` open the difficulty selector with Normal preselected. Press Enter for the default or deliberately choose another signal. `RETRY LEVEL` and `RETRY SEED` preserve the active difficulty. Easy Peasy and Overclocked scale gameplay movement, enemy release, and hazard timing together; menus and transitions remain at normal speed. Casual Mode keeps only the generated maze, Start, Exit, and player, replacing score and lives with a mode indicator.
 
+Entity movement uses a deliberately measured baseline: all runners and pursuers move at 75% of the original prototype pace. Their relative roles remain unchanged, and difficulty multipliers apply on top of these revised speeds. Release delays, spawn schedules, hazards, alerts, and transitions retain their existing timing.
+
 Escape opens a pause menu during active gameplay. While paused, simulation time, movement, hazards, and gameplay animations freeze. `RETURN TO GAME` preserves the exact stage state. `RETRY LEVEL` rebuilds the current level with the same layout, score carried from earlier levels, and lives held when the level began; progress and life changes from the discarded attempt are reset, and dismissed feature briefings do not repeat. `RETRY SEED` starts a clean Stage 1 run with the same seed and difficulty, while `NEW RUN` opens the difficulty selector for a fresh seed. Both run-level actions reset score, lives, stage progress, and feature discoveries. Pause is unavailable during briefings, life-loss interruptions, stage transitions, and game over.
 
 Coins are optional, but collecting every coin before reaching the exit earns the `COIN MONGER!` bonus and doubles that stage's coin award. The multiplier applies only when the stage is completed, never doubles score carried from earlier stages, and remains available after losing a reserve life because collected coins stay collected. A game over before the exit receives no bonus. Score saving remains deferred.
@@ -45,7 +47,7 @@ Floor spikes damage the player only while active. They never damage hostile enem
 
 Beginning on Stage 11, eligible full-game mazes hide one Ambusher at the end of a deep, single-entry branch outside Start's five-tile reveal radius. It remains invisible until the player reaches a tile within five walkable steps. The player finishes entering that tile, stops, and receives a one-second warning before the revealed Ambusher begins pursuing at hunter speed. After a reserve-life loss it returns to its hiding cell but remains visible and active. Expose the Ambusher and still reach the exit to earn the flat `SURVIVE THE AMBUSH +25` bonus; Coin Monger is calculated first and does not double this award. Stages without a qualifying five-tile branch contain no Ambusher, and Casual Mode remains maze-only.
 
-Beginning on Stage 21, a Wanderer enters every full-game maze at the Exit after a seeded delay of 5 to 60 simulation seconds. A one-second alert freezes play, then it wanders at 1.5 cells per Normal-mode second, choosing seeded random routes biased toward Start and avoiding active spikes. Reaching Start lets it leave. Coming within five walkable tiles permanently triggers hunter-speed pursuit; the player stops on the triggering tile for a one-second warning. An arrival already within range combines both warnings into one pause. Its exact position and mode survive a reserve-life loss. Escaping after it has spawned but before it leaves earns `EVADING THE WANDERER +25`, independently of Coin Monger and the Ambusher bonus; escaping before arrival earns nothing. Difficulty scales its schedule and movement in real time, and Casual Mode excludes it.
+Beginning on Stage 21, a Wanderer enters every full-game maze at the Exit after a seeded delay of 5 to 60 simulation seconds. A one-second alert freezes play, then it wanders at 1.125 cells per Normal-mode second, choosing seeded random routes biased toward Start and avoiding active spikes. Reaching Start lets it leave. Coming within five walkable tiles permanently triggers hunter-speed pursuit; the player stops on the triggering tile for a one-second warning. An arrival already within range combines both warnings into one pause. Its exact position and mode survive a reserve-life loss. Escaping after it has spawned but before it leaves earns `EVADING THE WANDERER +25`, independently of Coin Monger and the Ambusher bonus; escaping before arrival earns nothing. Difficulty scales its schedule and movement in real time, and Casual Mode excludes it.
 
 Extra-life targets move more slowly than the hunter but prefer routes that increase their distance from the player. At a dead end or local maximum, they commit to a route toward a less-visited region of the maze instead of bouncing between the same cells.
 
@@ -93,7 +95,7 @@ http://localhost:5173/?seed=DEADBEEF&difficulty=casual&debug=maze&stage=50
 ```
 
 The `stage` override is ignored unless `debug=maze` is also present.
-Maze debug mode always runs with Easy Peasy timing and skips the difficulty selector, regardless of any `difficulty` value in the URL.
+Maze debug mode defaults to Easy Peasy timing and skips the difficulty selector. Add an explicit `difficulty` value to compare another mode directly.
 
 ## Architecture
 

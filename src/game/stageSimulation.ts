@@ -1,5 +1,6 @@
 import { type GridPoint, type Maze, toIndex, Wall } from '../generation/maze'
 import { findNextEnemyCellTowardIndex } from './enemyNavigation'
+import type { EntityMovementSpeeds } from './gamePacing'
 import { DamageSource, INITIAL_LIVES, MAX_LIVES, type DamageSource as DamageSourceValue } from './lifeRules'
 import { getSpikePhase, type SpikeState, SpikePhase } from './spikeTiming'
 
@@ -246,11 +247,7 @@ export function queuePlayerDirection(simulation: StageSimulation, direction: Dir
 export function updateStageSimulation(
   simulation: StageSimulation,
   deltaSeconds: number,
-  speedInCellsPerSecond: number,
-  hunterSpeedInCellsPerSecond = 0,
-  lifeTargetSpeedInCellsPerSecond = 0,
-  ambusherSpeedInCellsPerSecond = hunterSpeedInCellsPerSecond,
-  wandererSpeedInCellsPerSecond = 0,
+  movementSpeeds: Partial<EntityMovementSpeeds> = {},
 ): void {
   if (simulation.complete || simulation.gameOver || deltaSeconds <= 0) {
     return
@@ -268,7 +265,7 @@ export function updateStageSimulation(
     return
   }
 
-  if (updatePlayer(simulation, deltaSeconds, speedInCellsPerSecond)) {
+  if (updatePlayer(simulation, deltaSeconds, movementSpeeds.player ?? 0)) {
     return
   }
 
@@ -282,12 +279,17 @@ export function updateStageSimulation(
     return
   }
 
-  updateHunter(simulation, deltaSeconds, hunterSpeedInCellsPerSecond)
-  updateAmbusher(simulation, deltaSeconds, ambusherSpeedInCellsPerSecond)
-  if (updateWanderer(simulation, deltaSeconds, wandererSpeedInCellsPerSecond, hunterSpeedInCellsPerSecond)) {
+  updateHunter(simulation, deltaSeconds, movementSpeeds.hunter ?? 0)
+  updateAmbusher(simulation, deltaSeconds, movementSpeeds.ambusher ?? 0)
+  if (updateWanderer(
+    simulation,
+    deltaSeconds,
+    movementSpeeds.wanderer ?? 0,
+    movementSpeeds.hunter ?? 0,
+  )) {
     return
   }
-  updateLifeTarget(simulation, deltaSeconds, lifeTargetSpeedInCellsPerSecond)
+  updateLifeTarget(simulation, deltaSeconds, movementSpeeds.lifeTarget ?? 0)
   collectLifeTargetIfCaught(simulation)
 
   if (simulation.hunter?.active && entitiesOverlap(simulation)) {
