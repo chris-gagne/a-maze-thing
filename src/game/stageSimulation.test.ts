@@ -10,6 +10,7 @@ import {
 import {
   createStageSimulation,
   Direction,
+  getAmbusherGridPosition,
   getHunterGridPosition,
   getLifeTargetGridPosition,
   getPlayerGridPosition,
@@ -142,6 +143,74 @@ describe('stage simulation', () => {
     expect(simulation.hunter?.active).toBe(true)
     expect(getHunterGridPosition(simulation)).toEqual(getPlayerGridPosition(simulation))
     expect(simulation.gameOver).toBe(true)
+  })
+
+  it('reveals the Ambusher at five walkable tiles and stops the player on arrival', () => {
+    const maze = generatePerfectMaze(8, 8, 109)
+    const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
+    const route = routeBetween(maze, entranceIndex, 7)
+    const simulation = createStageSimulation(maze, {
+      ambusher: { startCellIndex: route[6] },
+    })
+
+    updateStageSimulation(simulation, 0.1, 0, 0, 0, 1)
+    expect(simulation.ambusher?.revealed).toBe(false)
+
+    queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
+    updateStageSimulation(simulation, 1, 1, 0, 0, 1)
+
+    expect(simulation.player.cellIndex).toBe(route[1])
+    expect(simulation.player.targetCellIndex).toBeNull()
+    expect(simulation.player.direction).toBeNull()
+    expect(simulation.player.queuedDirection).toBeNull()
+    expect(simulation.ambusher?.revealed).toBe(true)
+    expect(simulation.ambusherReveals).toBe(1)
+    expect(simulation.ambusher?.cellIndex).toBe(route[6])
+  })
+
+  it('pursues like a second hunter after the reveal tick', () => {
+    const maze = generatePerfectMaze(8, 8, 110)
+    const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
+    const route = routeBetween(maze, entranceIndex, 7)
+    const simulation = createStageSimulation(maze, {
+      ambusher: { startCellIndex: route[6] },
+    })
+
+    queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
+    updateStageSimulation(simulation, 1, 1, 0, 0, 1)
+    updateStageSimulation(simulation, 1, 0, 0, 0, 1)
+
+    expect(simulation.ambusher?.cellIndex).toBe(route[5])
+    expect(getAmbusherGridPosition(simulation)).toEqual({
+      x: maze.cells[route[5]].x,
+      y: maze.cells[route[5]].y,
+    })
+    expect(simulation.ambusherReveals).toBe(1)
+  })
+
+  it('identifies Ambusher damage and keeps it revealed after a reserve-life reset', () => {
+    const maze = generatePerfectMaze(8, 8, 111)
+    const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
+    const route = routeBetween(maze, entranceIndex, 7)
+    const simulation = createStageSimulation(maze, {
+      ambusher: { startCellIndex: route[6] },
+      lives: MAX_LIVES,
+    })
+    simulation.ambusher!.revealed = true
+    simulation.ambusher!.active = true
+    simulation.ambusher!.cellIndex = entranceIndex
+
+    updateStageSimulation(simulation, 0.1, 0, 0, 0, 0)
+
+    expect(simulation.lives).toBe(1)
+    expect(simulation.lastDamageSource).toBe(DamageSource.Ambusher)
+    expect(simulation.ambusher).toMatchObject({
+      cellIndex: route[6],
+      targetCellIndex: null,
+      progress: 0,
+      revealed: true,
+      active: true,
+    })
   })
 
   it('does not pause a started release countdown when the player returns to the entrance', () => {

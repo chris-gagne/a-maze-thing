@@ -56,4 +56,11 @@ describe('selectStageIntroduction', () => {
       StageFeature.ExtraLife,
     ])
   })
+
+  it('introduces the Ambusher only when the stage contains one', () => {
+    const previous: StageFeatureId[] = [StageFeature.CoreBriefing]
+    expect(selectStageIntroduction(11, [], previous)).toBeNull()
+    expect(selectStageIntroduction(11, [StageFeature.Ambusher], previous)?.lines[0])
+      .toContain('25 coins')
+  })
 })

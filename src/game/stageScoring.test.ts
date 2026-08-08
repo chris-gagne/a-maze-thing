@@ -6,8 +6,10 @@ describe('calculateStageCoinAward', () => {
     expect(calculateStageCoinAward(40, 0, true)).toEqual({
       baseCoins: 40,
       bonusCoins: 40,
+      ambushBonusCoins: 0,
       awardedCoins: 80,
       coinMonger: true,
+      survivedAmbush: false,
     })
   })
 
@@ -15,8 +17,10 @@ describe('calculateStageCoinAward', () => {
     expect(calculateStageCoinAward(30, 10, true)).toEqual({
       baseCoins: 30,
       bonusCoins: 0,
+      ambushBonusCoins: 0,
       awardedCoins: 30,
       coinMonger: false,
+      survivedAmbush: false,
     })
   })
 
@@ -29,8 +33,10 @@ describe('calculateStageCoinAward', () => {
     expect(calculateStageCoinAward(0, 0, true)).toEqual({
       baseCoins: 0,
       bonusCoins: 0,
+      ambushBonusCoins: 0,
       awardedCoins: 0,
       coinMonger: false,
+      survivedAmbush: false,
     })
   })
 
@@ -39,6 +45,31 @@ describe('calculateStageCoinAward', () => {
     const award = calculateStageCoinAward(20, 0, true)
 
     expect(carriedScore + award.awardedCoins).toBe(165)
+  })
+
+  it('adds a flat 25 coins after exposing the Ambusher and escaping', () => {
+    expect(calculateStageCoinAward(20, 0, true, {
+      ambusherPlaced: true,
+      ambusherRevealed: true,
+    })).toEqual({
+      baseCoins: 20,
+      bonusCoins: 20,
+      ambushBonusCoins: 25,
+      awardedCoins: 65,
+      coinMonger: true,
+      survivedAmbush: true,
+    })
+  })
+
+  it('does not award the Ambusher bonus while hidden or before escape', () => {
+    expect(calculateStageCoinAward(20, 5, true, {
+      ambusherPlaced: true,
+      ambusherRevealed: false,
+    }).ambushBonusCoins).toBe(0)
+    expect(calculateStageCoinAward(20, 5, false, {
+      ambusherPlaced: true,
+      ambusherRevealed: true,
+    }).ambushBonusCoins).toBe(0)
   })
 
   it.each([

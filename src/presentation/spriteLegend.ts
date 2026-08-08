@@ -18,6 +18,11 @@ export type LegendEntry = TextureLegendEntry | StartLegendEntry
 export const LEGEND_ENTRIES: readonly LegendEntry[] = [
   { name: 'Player', rule: 'Your runner through the maze.', textureKey: TextureKey.Player },
   { name: 'Hunter', rule: 'Follows your route through the maze.', textureKey: TextureKey.Hunter },
+  {
+    name: 'Ambusher',
+    rule: 'Expose it, then escape for a 25-coin survival bonus.',
+    textureKey: TextureKey.Ambusher,
+  },
   { name: 'Coin', rule: 'Collect every coin before exiting for a 2X stage award.', textureKey: TextureKey.Coin },
   { name: 'Exit', rule: 'Completes the current stage.', textureKey: TextureKey.Exit },
   { name: 'Extra Life', rule: 'Catch it to gain one life.', textureKey: TextureKey.LifeTarget },

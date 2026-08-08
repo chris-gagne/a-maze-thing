@@ -1,4 +1,5 @@
 export const TextureKey = {
+  Ambusher: 'ambusher',
   Coin: 'coin',
   Exit: 'exit',
   Hunter: 'hunter',
@@ -17,6 +18,20 @@ export interface PixelPattern {
 }
 
 export const PIXEL_PATTERNS: Record<TextureKey, PixelPattern> = {
+  [TextureKey.Ambusher]: {
+    rows: [
+      '00111100',
+      '01133110',
+      '11311311',
+      '13333331',
+      '11111111',
+      '10100101',
+      '01011010',
+      '10000001',
+    ],
+    palette: { '1': 0xffb629, '3': 0xffef9b },
+    pixelSize: 3,
+  },
   [TextureKey.Player]: {
     rows: [
       '00011000',

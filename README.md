@@ -41,7 +41,9 @@ Coins are optional, but collecting every coin before reaching the exit earns the
 
 A fresh run opens with a short maze briefing. Later stages pause for one combined introduction only when their generated layout contains something not yet seen in that run, such as spikes or the evasive Extra Life. The maze simulation and hazard timers remain frozen until the briefing is dismissed; game over resets these discoveries for the next run.
 
-Floor spikes damage the player only while active. They never damage hostile enemies, but active spikes block new hunter routes; inactive, warning, and recovery phases remain traversable. Future ambusher and wanderer enemies will use the same blocker-aware navigation.
+Floor spikes damage the player only while active. They never damage hostile enemies, but active spikes block new hunter and Ambusher routes; inactive, warning, and recovery phases remain traversable. The future wanderer enemy will use the same blocker-aware navigation.
+
+Beginning on Stage 11, eligible full-game mazes hide one Ambusher at the end of a deep, single-entry branch outside Start's five-tile reveal radius. It remains invisible until the player reaches a tile within five walkable steps. The player finishes entering that tile, stops, and receives a one-second warning before the revealed Ambusher begins pursuing at hunter speed. After a reserve-life loss it returns to its hiding cell but remains visible and active. Expose the Ambusher and still reach the exit to earn the flat `SURVIVE THE AMBUSH +25` bonus; Coin Monger is calculated first and does not double this award. Stages without a qualifying five-tile branch contain no Ambusher, and Casual Mode remains maze-only.
 
 Extra-life targets move more slowly than the hunter but prefer routes that increase their distance from the player. At a dead end or local maximum, they commit to a route toward a less-visited region of the maze instead of bouncing between the same cells.
 
@@ -101,6 +103,6 @@ The deterministic game modules do not depend on Phaser. Rendering runs at the br
 
 ## Current slice
 
-Implemented: four run difficulties, maze-only Casual Mode, scalable gameplay timing, five-band maze growth through Stage 50, increasingly braided route profiles, scrolling late-stage worlds, deterministic post-cap variations, reusable dead-end escape portals, loop-biased coin clusters, continuous buffered movement, optional coins, stage progression, run-scoped feature briefings, one delayed hunter with stable route choices, scarce evasive extra-life targets, telegraphed timed floor spikes, retained-life respawns, a responsive sprite legend, pixel presentation, and reproducible/debug URLs.
+Implemented: four run difficulties, maze-only Casual Mode, scalable gameplay timing, five-band maze growth through Stage 50, increasingly braided route profiles, scrolling late-stage worlds, deterministic post-cap variations, reusable dead-end escape portals, loop-biased coin clusters, continuous buffered movement, optional coins, stage progression, run-scoped feature briefings, one delayed hunter with stable route choices, hidden Stage 11+ Ambushers with a 25-coin survival challenge, scarce evasive extra-life targets, telegraphed timed floor spikes, retained-life respawns, a responsive sprite legend, pixel presentation, and reproducible/debug URLs.
 
-Next: the ambusher and wanderer, moving blades, controller input, reactive audio, and local leaderboards.
+Next: the wanderer, moving blades, controller input, reactive audio, and local leaderboards.

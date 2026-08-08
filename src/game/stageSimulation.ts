@@ -34,6 +34,15 @@ export interface HunterState {
   active: boolean
 }
 
+export interface AmbusherState {
+  spawnCellIndex: number
+  cellIndex: number
+  targetCellIndex: number | null
+  progress: number
+  revealed: boolean
+  active: boolean
+}
+
 export interface LifeTargetState {
   cellIndex: number
   previousCellIndex: number | null
@@ -48,6 +57,8 @@ export interface StageSimulation {
   maze: Maze
   player: PlayerState
   hunter: HunterState | null
+  ambusher: AmbusherState | null
+  ambusherReveals: number
   lifeTarget: LifeTargetState | null
   spikes: SpikeState[]
   portals: Set<number>
@@ -70,6 +81,9 @@ export interface StageSimulationOptions {
   hunter?: {
     startCellIndex: number
     releaseDelaySeconds: number
+  }
+  ambusher?: {
+    startCellIndex: number
   }
   lifeTarget?: {
     startCellIndex: number
@@ -144,6 +158,17 @@ export function createStageSimulation(
           releaseStarted: false,
           active: false,
         },
+    ambusher: options.ambusher === undefined
+      ? null
+      : {
+          spawnCellIndex: options.ambusher.startCellIndex,
+          cellIndex: options.ambusher.startCellIndex,
+          targetCellIndex: null,
+          progress: 0,
+          revealed: false,
+          active: false,
+        },
+    ambusherReveals: 0,
     lifeTarget: options.lifeTarget === undefined
       ? null
       : {
@@ -182,6 +207,7 @@ export function updateStageSimulation(
   speedInCellsPerSecond: number,
   hunterSpeedInCellsPerSecond = 0,
   lifeTargetSpeedInCellsPerSecond = 0,
+  ambusherSpeedInCellsPerSecond = hunterSpeedInCellsPerSecond,
 ): void {
   if (simulation.complete || simulation.gameOver || deltaSeconds <= 0) {
     return
@@ -189,7 +215,13 @@ export function updateStageSimulation(
 
   simulation.elapsedSeconds += deltaSeconds
 
-  updatePlayer(simulation, deltaSeconds, speedInCellsPerSecond)
+  if (revealAmbusherIfClose(simulation)) {
+    return
+  }
+
+  if (updatePlayer(simulation, deltaSeconds, speedInCellsPerSecond)) {
+    return
+  }
 
   collectLifeTargetIfCaught(simulation)
 
@@ -198,11 +230,14 @@ export function updateStageSimulation(
   }
 
   updateHunter(simulation, deltaSeconds, hunterSpeedInCellsPerSecond)
+  updateAmbusher(simulation, deltaSeconds, ambusherSpeedInCellsPerSecond)
   updateLifeTarget(simulation, deltaSeconds, lifeTargetSpeedInCellsPerSecond)
   collectLifeTargetIfCaught(simulation)
 
   if (simulation.hunter?.active && entitiesOverlap(simulation)) {
     loseLife(simulation, DamageSource.Hunter)
+  } else if (simulation.ambusher?.active && entitiesOverlap(simulation, simulation.ambusher)) {
+    loseLife(simulation, DamageSource.Ambusher)
   } else if (isPlayerOnActiveSpike(simulation)) {
     loseLife(simulation, DamageSource.Spike)
   }
@@ -216,6 +251,12 @@ export function getHunterGridPosition(simulation: StageSimulation): GridPoint | 
   }
 
   return getMovingEntityPosition(simulation.maze, hunter)
+}
+
+export function getAmbusherGridPosition(simulation: StageSimulation): GridPoint | null {
+  return simulation.ambusher === null
+    ? null
+    : getMovingEntityPosition(simulation.maze, simulation.ambusher)
 }
 
 export function getLifeTargetGridPosition(simulation: StageSimulation): GridPoint | null {
@@ -232,12 +273,12 @@ function updatePlayer(
   simulation: StageSimulation,
   deltaSeconds: number,
   speedInCellsPerSecond: number,
-): void {
+): boolean {
   let remainingDistance = deltaSeconds * Math.max(0, speedInCellsPerSecond)
 
   while (remainingDistance > ARRIVAL_EPSILON && !simulation.complete) {
     if (simulation.player.targetCellIndex === null && !beginNextSegment(simulation)) {
-      return
+      return false
     }
 
     const distanceToTarget = 1 - simulation.player.progress
@@ -247,10 +288,16 @@ function updatePlayer(
 
     if (simulation.player.progress >= 1 - ARRIVAL_EPSILON) {
       if (arriveAtTarget(simulation)) {
-        return
+        return false
+      }
+
+      if (revealAmbusherIfClose(simulation)) {
+        return true
       }
     }
   }
+
+  return false
 }
 
 function updateHunter(
@@ -288,26 +335,48 @@ function updateHunter(
     hunter.active = true
   }
 
-  let remainingDistance = activeSeconds * speedInCellsPerSecond
+  updatePursuer(simulation, hunter, activeSeconds, speedInCellsPerSecond)
+}
+
+function updateAmbusher(
+  simulation: StageSimulation,
+  deltaSeconds: number,
+  speedInCellsPerSecond: number,
+): void {
+  const ambusher = simulation.ambusher
+  if (ambusher === null || !ambusher.active) {
+    return
+  }
+
+  updatePursuer(simulation, ambusher, deltaSeconds, speedInCellsPerSecond)
+}
+
+function updatePursuer(
+  simulation: StageSimulation,
+  pursuer: Pick<AmbusherState, 'cellIndex' | 'targetCellIndex' | 'progress'>,
+  deltaSeconds: number,
+  speedInCellsPerSecond: number,
+): void {
+  let remainingDistance = deltaSeconds * Math.max(0, speedInCellsPerSecond)
 
   while (remainingDistance > ARRIVAL_EPSILON) {
-    if (hunter.targetCellIndex === null) {
-      hunter.targetCellIndex = findNextCellTowardPlayer(simulation)
+    if (pursuer.targetCellIndex === null) {
+      pursuer.targetCellIndex = findNextCellTowardPlayer(simulation, pursuer.cellIndex)
 
-      if (hunter.targetCellIndex === null) {
+      if (pursuer.targetCellIndex === null) {
         return
       }
     }
 
-    const distanceToTarget = 1 - hunter.progress
+    const distanceToTarget = 1 - pursuer.progress
     const distanceTraveled = Math.min(distanceToTarget, remainingDistance)
-    hunter.progress += distanceTraveled
+    pursuer.progress += distanceTraveled
     remainingDistance -= distanceTraveled
 
-    if (hunter.progress >= 1 - ARRIVAL_EPSILON) {
-      hunter.cellIndex = hunter.targetCellIndex
-      hunter.targetCellIndex = null
-      hunter.progress = 0
+    if (pursuer.progress >= 1 - ARRIVAL_EPSILON) {
+      pursuer.cellIndex = pursuer.targetCellIndex
+      pursuer.targetCellIndex = null
+      pursuer.progress = 0
     }
   }
 }
@@ -478,17 +547,11 @@ function arriveAtTarget(simulation: StageSimulation): boolean {
   return false
 }
 
-function findNextCellTowardPlayer(simulation: StageSimulation): number | null {
-  const hunter = simulation.hunter
-
-  if (hunter === null) {
-    return null
-  }
-
+function findNextCellTowardPlayer(simulation: StageSimulation, pursuerCellIndex: number): number | null {
   const targetIndex = simulation.player.targetCellIndex ?? simulation.player.cellIndex
   return findNextEnemyCellTowardIndex(
     simulation.maze,
-    hunter.cellIndex,
+    pursuerCellIndex,
     targetIndex,
     getActiveSpikeCellIndices(simulation),
     getEnemyNeighborIndices,
@@ -510,15 +573,41 @@ function getActiveSpikeCellIndices(simulation: StageSimulation): Set<number> {
   )
 }
 
-function entitiesOverlap(simulation: StageSimulation): boolean {
+function entitiesOverlap(
+  simulation: StageSimulation,
+  entity: Pick<AmbusherState, 'cellIndex' | 'targetCellIndex' | 'progress'> | null = simulation.hunter,
+): boolean {
   const player = getPlayerGridPosition(simulation)
-  const hunter = getHunterGridPosition(simulation)
+  if (entity === null) {
+    return false
+  }
+  const enemy = getMovingEntityPosition(simulation.maze, entity)
 
-  if (hunter === null) {
+  return Math.hypot(player.x - enemy.x, player.y - enemy.y) <= 0.32
+}
+
+function revealAmbusherIfClose(simulation: StageSimulation): boolean {
+  const ambusher = simulation.ambusher
+  if (
+    ambusher === null
+    || ambusher.revealed
+    || simulation.player.targetCellIndex !== null
+    || simulation.complete
+  ) {
     return false
   }
 
-  return Math.hypot(player.x - hunter.x, player.y - hunter.y) <= 0.32
+  const distances = getDistancesFrom(simulation.maze, simulation.player.cellIndex)
+  if (distances[ambusher.cellIndex] > 5) {
+    return false
+  }
+
+  ambusher.revealed = true
+  ambusher.active = true
+  simulation.ambusherReveals += 1
+  simulation.player.direction = null
+  simulation.player.queuedDirection = null
+  return true
 }
 
 function isPlayerOnActiveSpike(simulation: StageSimulation): boolean {
@@ -723,6 +812,11 @@ function loseLife(simulation: StageSimulation, source: DamageSourceValue): void 
     simulation.hunter.releaseSecondsRemaining = simulation.hunter.releaseDelaySeconds
     simulation.hunter.releaseStarted = false
     simulation.hunter.active = false
+  }
+
+  if (simulation.ambusher !== null) {
+    resetMovingEntity(simulation.ambusher, simulation.ambusher.spawnCellIndex)
+    simulation.ambusher.active = simulation.ambusher.revealed
   }
 }
 

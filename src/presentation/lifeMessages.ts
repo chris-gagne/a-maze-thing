@@ -6,6 +6,10 @@ export interface LifeMessage {
 }
 
 const LIFE_MESSAGES: Readonly<Record<DamageSourceValue, LifeMessage>> = {
+  [DamageSource.Ambusher]: {
+    cause: 'THE AMBUSH CLOSED IN.',
+    finalCause: 'THE AMBUSH ENDED THE RUN.',
+  },
   [DamageSource.Hunter]: {
     cause: 'THE HUNTER CLOSED THE GAP.',
     finalCause: 'THE HUNTER ENDED THE RUN.',
