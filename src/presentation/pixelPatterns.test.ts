@@ -25,17 +25,22 @@ describe('pixel patterns', () => {
     expect([...LEGEND_TEXTURE_KEYS].sort()).toEqual(Object.values(TextureKey).sort())
   })
 
-  it('gives the hunter a distinct silhouette and uses it in the legend', () => {
+  it('gives each character a distinct silhouette and uses redesigned enemies in the legend', () => {
     const silhouette = (textureKey: TextureKey): string => PIXEL_PATTERNS[textureKey].rows
       .map((row) => Array.from(row, (paletteKey) => paletteKey === '0' ? '0' : '1').join(''))
       .join('\n')
-    const hunterSilhouette = silhouette(TextureKey.Hunter)
+    const characterTextureKeys = [
+      TextureKey.Player,
+      TextureKey.Hunter,
+      TextureKey.Ambusher,
+      TextureKey.Wanderer,
+    ]
 
-    for (const textureKey of [TextureKey.Player, TextureKey.Ambusher, TextureKey.Wanderer]) {
-      expect(hunterSilhouette).not.toBe(silhouette(textureKey))
-    }
+    expect(new Set(characterTextureKeys.map(silhouette)).size).toBe(characterTextureKeys.length)
 
     expect(LEGEND_ENTRIES.find((entry) => entry.name === 'Hunter')?.textureKey)
       .toBe(TextureKey.Hunter)
+    expect(LEGEND_ENTRIES.find((entry) => entry.name === 'Ambusher')?.textureKey)
+      .toBe(TextureKey.Ambusher)
   })
 })
