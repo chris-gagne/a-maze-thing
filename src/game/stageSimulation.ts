@@ -43,6 +43,21 @@ export interface AmbusherState {
   active: boolean
 }
 
+export interface WandererState {
+  spawnCellIndex: number
+  departureCellIndex: number
+  cellIndex: number
+  previousCellIndex: number | null
+  targetCellIndex: number | null
+  progress: number
+  spawnSeconds: number
+  spawned: boolean
+  triggered: boolean
+  departed: boolean
+  routeSeed: number
+  routeDecisionCount: number
+}
+
 export interface LifeTargetState {
   cellIndex: number
   previousCellIndex: number | null
@@ -59,6 +74,9 @@ export interface StageSimulation {
   hunter: HunterState | null
   ambusher: AmbusherState | null
   ambusherReveals: number
+  wanderer: WandererState | null
+  wandererSpawns: number
+  wandererTriggers: number
   lifeTarget: LifeTargetState | null
   spikes: SpikeState[]
   portals: Set<number>
@@ -84,6 +102,12 @@ export interface StageSimulationOptions {
   }
   ambusher?: {
     startCellIndex: number
+  }
+  wanderer?: {
+    startCellIndex: number
+    departureCellIndex: number
+    spawnSeconds: number
+    routeSeed: number
   }
   lifeTarget?: {
     startCellIndex: number
@@ -169,6 +193,24 @@ export function createStageSimulation(
           active: false,
         },
     ambusherReveals: 0,
+    wanderer: options.wanderer === undefined
+      ? null
+      : {
+          spawnCellIndex: options.wanderer.startCellIndex,
+          departureCellIndex: options.wanderer.departureCellIndex,
+          cellIndex: options.wanderer.startCellIndex,
+          previousCellIndex: null,
+          targetCellIndex: null,
+          progress: 0,
+          spawnSeconds: options.wanderer.spawnSeconds,
+          spawned: false,
+          triggered: false,
+          departed: false,
+          routeSeed: options.wanderer.routeSeed,
+          routeDecisionCount: 0,
+        },
+    wandererSpawns: 0,
+    wandererTriggers: 0,
     lifeTarget: options.lifeTarget === undefined
       ? null
       : {
@@ -208,12 +250,19 @@ export function updateStageSimulation(
   hunterSpeedInCellsPerSecond = 0,
   lifeTargetSpeedInCellsPerSecond = 0,
   ambusherSpeedInCellsPerSecond = hunterSpeedInCellsPerSecond,
+  wandererSpeedInCellsPerSecond = 0,
 ): void {
   if (simulation.complete || simulation.gameOver || deltaSeconds <= 0) {
     return
   }
 
   simulation.elapsedSeconds += deltaSeconds
+
+  spawnWandererIfDue(simulation)
+
+  if (triggerWandererIfClose(simulation)) {
+    return
+  }
 
   if (revealAmbusherIfClose(simulation)) {
     return
@@ -229,8 +278,15 @@ export function updateStageSimulation(
     return
   }
 
+  if (triggerWandererIfClose(simulation)) {
+    return
+  }
+
   updateHunter(simulation, deltaSeconds, hunterSpeedInCellsPerSecond)
   updateAmbusher(simulation, deltaSeconds, ambusherSpeedInCellsPerSecond)
+  if (updateWanderer(simulation, deltaSeconds, wandererSpeedInCellsPerSecond, hunterSpeedInCellsPerSecond)) {
+    return
+  }
   updateLifeTarget(simulation, deltaSeconds, lifeTargetSpeedInCellsPerSecond)
   collectLifeTargetIfCaught(simulation)
 
@@ -238,6 +294,8 @@ export function updateStageSimulation(
     loseLife(simulation, DamageSource.Hunter)
   } else if (simulation.ambusher?.active && entitiesOverlap(simulation, simulation.ambusher)) {
     loseLife(simulation, DamageSource.Ambusher)
+  } else if (simulation.wanderer?.triggered && entitiesOverlap(simulation, simulation.wanderer)) {
+    loseLife(simulation, DamageSource.Wanderer)
   } else if (isPlayerOnActiveSpike(simulation)) {
     loseLife(simulation, DamageSource.Spike)
   }
@@ -257,6 +315,13 @@ export function getAmbusherGridPosition(simulation: StageSimulation): GridPoint 
   return simulation.ambusher === null
     ? null
     : getMovingEntityPosition(simulation.maze, simulation.ambusher)
+}
+
+export function getWandererGridPosition(simulation: StageSimulation): GridPoint | null {
+  const wanderer = simulation.wanderer
+  return wanderer === null || !wanderer.spawned || wanderer.departed
+    ? null
+    : getMovingEntityPosition(simulation.maze, wanderer)
 }
 
 export function getLifeTargetGridPosition(simulation: StageSimulation): GridPoint | null {
@@ -349,6 +414,114 @@ function updateAmbusher(
   }
 
   updatePursuer(simulation, ambusher, deltaSeconds, speedInCellsPerSecond)
+}
+
+function spawnWandererIfDue(simulation: StageSimulation): void {
+  const wanderer = simulation.wanderer
+  if (
+    wanderer === null
+    || wanderer.spawned
+    || wanderer.departed
+    || simulation.elapsedSeconds < wanderer.spawnSeconds
+  ) {
+    return
+  }
+
+  wanderer.spawned = true
+  simulation.wandererSpawns += 1
+}
+
+function updateWanderer(
+  simulation: StageSimulation,
+  deltaSeconds: number,
+  wanderingSpeedInCellsPerSecond: number,
+  pursuitSpeedInCellsPerSecond: number,
+): boolean {
+  const wanderer = simulation.wanderer
+  if (wanderer === null || !wanderer.spawned || wanderer.departed) {
+    return false
+  }
+
+  if (wanderer.triggered) {
+    updatePursuer(simulation, wanderer, deltaSeconds, pursuitSpeedInCellsPerSecond)
+    return false
+  }
+
+  let remainingDistance = deltaSeconds * Math.max(0, wanderingSpeedInCellsPerSecond)
+  while (remainingDistance > ARRIVAL_EPSILON && !wanderer.departed) {
+    if (wanderer.targetCellIndex === null) {
+      wanderer.targetCellIndex = selectWandererNeighbor(simulation)
+      if (wanderer.targetCellIndex === null) {
+        return false
+      }
+    }
+
+    const distanceToTarget = 1 - wanderer.progress
+    const distanceTraveled = Math.min(distanceToTarget, remainingDistance)
+    wanderer.progress += distanceTraveled
+    remainingDistance -= distanceTraveled
+
+    if (wanderer.progress >= 1 - ARRIVAL_EPSILON) {
+      wanderer.previousCellIndex = wanderer.cellIndex
+      wanderer.cellIndex = wanderer.targetCellIndex
+      wanderer.targetCellIndex = null
+      wanderer.progress = 0
+
+      if (wanderer.cellIndex === wanderer.departureCellIndex) {
+        wanderer.departed = true
+        return false
+      }
+
+      if (triggerWandererIfClose(simulation)) {
+        return true
+      }
+    }
+  }
+
+  return false
+}
+
+function selectWandererNeighbor(simulation: StageSimulation): number | null {
+  const wanderer = simulation.wanderer
+  if (wanderer === null) {
+    return null
+  }
+
+  const blocked = getActiveSpikeCellIndices(simulation)
+  let candidates = getEnemyNeighborIndices(simulation.maze, wanderer.cellIndex)
+    .filter((cellIndex) => !blocked.has(cellIndex))
+  const forwardCandidates = candidates.filter((cellIndex) => cellIndex !== wanderer.previousCellIndex)
+  if (forwardCandidates.length > 0) {
+    candidates = forwardCandidates
+  }
+  if (candidates.length === 0) {
+    return null
+  }
+
+  const distances = getDistancesFrom(simulation.maze, wanderer.departureCellIndex)
+  const currentDistance = distances[wanderer.cellIndex]
+  const weights = candidates.map((cellIndex) => {
+    return distances[cellIndex] < currentDistance ? 4 : distances[cellIndex] === currentDistance ? 2 : 1
+  })
+  const totalWeight = weights.reduce((total, weight) => total + weight, 0)
+  let sample = getWandererRandom(wanderer.routeSeed, wanderer.routeDecisionCount) * totalWeight
+  wanderer.routeDecisionCount += 1
+
+  for (let index = 0; index < candidates.length; index += 1) {
+    sample -= weights[index]
+    if (sample < 0) {
+      return candidates[index]
+    }
+  }
+
+  return candidates[candidates.length - 1]
+}
+
+function getWandererRandom(seed: number, decisionCount: number): number {
+  let value = (seed + Math.imul(decisionCount + 1, 0x6d2b79f5)) | 0
+  value = Math.imul(value ^ (value >>> 15), 1 | value)
+  value ^= value + Math.imul(value ^ (value >>> 7), 61 | value)
+  return ((value ^ (value >>> 14)) >>> 0) / 4294967296
 }
 
 function updatePursuer(
@@ -605,6 +778,31 @@ function revealAmbusherIfClose(simulation: StageSimulation): boolean {
   ambusher.revealed = true
   ambusher.active = true
   simulation.ambusherReveals += 1
+  simulation.player.direction = null
+  simulation.player.queuedDirection = null
+  return true
+}
+
+function triggerWandererIfClose(simulation: StageSimulation): boolean {
+  const wanderer = simulation.wanderer
+  if (
+    wanderer === null
+    || !wanderer.spawned
+    || wanderer.triggered
+    || wanderer.departed
+    || simulation.player.targetCellIndex !== null
+    || simulation.complete
+  ) {
+    return false
+  }
+
+  const distances = getDistancesFrom(simulation.maze, simulation.player.cellIndex)
+  if (distances[wanderer.cellIndex] > 5) {
+    return false
+  }
+
+  wanderer.triggered = true
+  simulation.wandererTriggers += 1
   simulation.player.direction = null
   simulation.player.queuedDirection = null
   return true

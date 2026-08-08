@@ -23,6 +23,11 @@ export const LEGEND_ENTRIES: readonly LegendEntry[] = [
     rule: 'Expose it, then escape for a 25-coin survival bonus.',
     textureKey: TextureKey.Ambusher,
   },
+  {
+    name: 'Wanderer',
+    rule: 'Wanders from Exit to Start. Keep clear and escape for +25.',
+    textureKey: TextureKey.Wanderer,
+  },
   { name: 'Coin', rule: 'Collect every coin before exiting for a 2X stage award.', textureKey: TextureKey.Coin },
   { name: 'Exit', rule: 'Completes the current stage.', textureKey: TextureKey.Exit },
   { name: 'Extra Life', rule: 'Catch it to gain one life.', textureKey: TextureKey.LifeTarget },

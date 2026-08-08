@@ -2,14 +2,18 @@ export interface StageCoinAward {
   baseCoins: number
   bonusCoins: number
   ambushBonusCoins: number
+  wandererBonusCoins: number
   awardedCoins: number
   coinMonger: boolean
   survivedAmbush: boolean
+  evadedWanderer: boolean
 }
 
 export interface StageChallengeState {
   ambusherPlaced: boolean
   ambusherRevealed: boolean
+  wandererSpawned?: boolean
+  wandererDeparted?: boolean
 }
 
 export function calculateStageCoinAward(
@@ -25,14 +29,20 @@ export function calculateStageCoinAward(
   const bonusCoins = coinMonger ? collectedCoins : 0
   const survivedAmbush = stageComplete && challenge.ambusherPlaced && challenge.ambusherRevealed
   const ambushBonusCoins = survivedAmbush ? 25 : 0
+  const evadedWanderer = stageComplete
+    && challenge.wandererSpawned === true
+    && challenge.wandererDeparted !== true
+  const wandererBonusCoins = evadedWanderer ? 25 : 0
 
   return {
     baseCoins: collectedCoins,
     bonusCoins,
     ambushBonusCoins,
-    awardedCoins: collectedCoins + bonusCoins + ambushBonusCoins,
+    wandererBonusCoins,
+    awardedCoins: collectedCoins + bonusCoins + ambushBonusCoins + wandererBonusCoins,
     coinMonger,
     survivedAmbush,
+    evadedWanderer,
   }
 }
 

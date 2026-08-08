@@ -5,6 +5,7 @@ export const DamageSource = {
   Ambusher: 'ambusher',
   Hunter: 'hunter',
   Spike: 'spike',
+  Wanderer: 'wanderer',
 } as const
 
 export type DamageSource = typeof DamageSource[keyof typeof DamageSource]

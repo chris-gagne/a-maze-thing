@@ -63,4 +63,11 @@ describe('selectStageIntroduction', () => {
     expect(selectStageIntroduction(11, [StageFeature.Ambusher], previous)?.lines[0])
       .toContain('25 coins')
   })
+
+  it('introduces the Wanderer only when the stage contains one', () => {
+    const previous: StageFeatureId[] = [StageFeature.CoreBriefing, StageFeature.Ambusher]
+    expect(selectStageIntroduction(21, [], previous)).toBeNull()
+    expect(selectStageIntroduction(21, [StageFeature.Wanderer], previous)?.lines[0])
+      .toContain('Wanderer')
+  })
 })

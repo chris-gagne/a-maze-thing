@@ -23,4 +23,11 @@ describe('getLifeMessage', () => {
       finalCause: 'THE MAZE CLAIMED ITS LAST LIFE.',
     })
   })
+
+  it('provides themed Wanderer copy for a lost and final life', () => {
+    expect(getLifeMessage(DamageSource.Wanderer)).toEqual({
+      cause: 'THE WANDERER FOUND YOU.',
+      finalCause: 'THE WANDERER ENDED THE RUN.',
+    })
+  })
 })

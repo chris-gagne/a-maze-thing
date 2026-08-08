@@ -7,6 +7,7 @@ export const TextureKey = {
   Player: 'player',
   Portal: 'portal',
   Spike: 'spike',
+  Wanderer: 'wanderer',
 } as const
 
 export type TextureKey = (typeof TextureKey)[keyof typeof TextureKey]
@@ -18,6 +19,20 @@ export interface PixelPattern {
 }
 
 export const PIXEL_PATTERNS: Record<TextureKey, PixelPattern> = {
+  [TextureKey.Wanderer]: {
+    rows: [
+      '00111100',
+      '01122110',
+      '11211211',
+      '12222221',
+      '11111111',
+      '10011001',
+      '01100110',
+      '10000001',
+    ],
+    palette: { '1': 0x9d7bff, '2': 0xe8ddff },
+    pixelSize: 3,
+  },
   [TextureKey.Ambusher]: {
     rows: [
       '00111100',

@@ -41,13 +41,15 @@ Coins are optional, but collecting every coin before reaching the exit earns the
 
 A fresh run opens with a short maze briefing. Later stages pause for one combined introduction only when their generated layout contains something not yet seen in that run, such as spikes or the evasive Extra Life. The maze simulation and hazard timers remain frozen until the briefing is dismissed; game over resets these discoveries for the next run.
 
-Floor spikes damage the player only while active. They never damage hostile enemies, but active spikes block new hunter and Ambusher routes; inactive, warning, and recovery phases remain traversable. The future wanderer enemy will use the same blocker-aware navigation.
+Floor spikes damage the player only while active. They never damage hostile enemies, but active spikes block new hunter, Ambusher, and Wanderer routes; inactive, warning, and recovery phases remain traversable.
 
 Beginning on Stage 11, eligible full-game mazes hide one Ambusher at the end of a deep, single-entry branch outside Start's five-tile reveal radius. It remains invisible until the player reaches a tile within five walkable steps. The player finishes entering that tile, stops, and receives a one-second warning before the revealed Ambusher begins pursuing at hunter speed. After a reserve-life loss it returns to its hiding cell but remains visible and active. Expose the Ambusher and still reach the exit to earn the flat `SURVIVE THE AMBUSH +25` bonus; Coin Monger is calculated first and does not double this award. Stages without a qualifying five-tile branch contain no Ambusher, and Casual Mode remains maze-only.
 
+Beginning on Stage 21, a Wanderer enters every full-game maze at the Exit after a seeded delay of 5 to 60 simulation seconds. A one-second alert freezes play, then it wanders at 1.5 cells per Normal-mode second, choosing seeded random routes biased toward Start and avoiding active spikes. Reaching Start lets it leave. Coming within five walkable tiles permanently triggers hunter-speed pursuit; the player stops on the triggering tile for a one-second warning. An arrival already within range combines both warnings into one pause. Its exact position and mode survive a reserve-life loss. Escaping after it has spawned but before it leaves earns `EVADING THE WANDERER +25`, independently of Coin Monger and the Ambusher bonus; escaping before arrival earns nothing. Difficulty scales its schedule and movement in real time, and Casual Mode excludes it.
+
 Extra-life targets move more slowly than the hunter but prefer routes that increase their distance from the player. At a dead end or local maximum, they commit to a route toward a less-visited region of the maze instead of bouncing between the same cells.
 
-Each run starts with one life and can hold at most two. The evasive Extra Life is guaranteed on Stage 2 while one life remains; later replacement opportunities are scarce and random. Catching it grants the single reserve life. Losing that reserve resets the player and hunter, clears the Start return link, and pauses for 1.25 seconds with a message identifying whether the hunter or spikes caused the hit. Collected coins, caught targets, and the current hazard clock are preserved.
+Each run starts with one life and can hold at most two. The evasive Extra Life is guaranteed on Stage 2 while one life remains; later replacement opportunities are scarce and random. Catching it grants the single reserve life. Losing that reserve resets the player and hunter, clears the Start return link, and pauses for 1.25 seconds with a cause-specific message. The Wanderer remains exactly where it was, including whether it was wandering or pursuing. Collected coins, caught targets, and the current hazard clock are preserved.
 
 Losing the final life opens a persistent run summary with the highest stage reached and total coins recovered. `NEW RUN` generates a pending fresh seed and opens the difficulty selector; the URL updates when a mode is confirmed. `RETRY SEED` restarts Stage 1 with the same generated stage sequence and difficulty. Both reset lives, score, and feature discoveries. Scores are carried only during the active run; saving, history, and leaderboards are deferred.
 
@@ -91,6 +93,7 @@ http://localhost:5173/?seed=DEADBEEF&difficulty=casual&debug=maze&stage=50
 ```
 
 The `stage` override is ignored unless `debug=maze` is also present.
+Maze debug mode always runs with Easy Peasy timing and skips the difficulty selector, regardless of any `difficulty` value in the URL.
 
 ## Architecture
 
@@ -103,6 +106,6 @@ The deterministic game modules do not depend on Phaser. Rendering runs at the br
 
 ## Current slice
 
-Implemented: four run difficulties, maze-only Casual Mode, scalable gameplay timing, five-band maze growth through Stage 50, increasingly braided route profiles, scrolling late-stage worlds, deterministic post-cap variations, reusable dead-end escape portals, loop-biased coin clusters, continuous buffered movement, optional coins, stage progression, run-scoped feature briefings, one delayed hunter with stable route choices, hidden Stage 11+ Ambushers with a 25-coin survival challenge, scarce evasive extra-life targets, telegraphed timed floor spikes, retained-life respawns, a responsive sprite legend, pixel presentation, and reproducible/debug URLs.
+Implemented: four run difficulties, maze-only Casual Mode, scalable gameplay timing, five-band maze growth through Stage 50, increasingly braided route profiles, scrolling late-stage worlds, deterministic post-cap variations, reusable dead-end escape portals, loop-biased coin clusters, continuous buffered movement, optional coins, stage progression, run-scoped feature briefings, one delayed hunter with stable route choices, hidden Stage 11+ Ambushers with a 25-coin survival challenge, seeded Stage 21+ Wanderers with evasion rewards, scarce evasive extra-life targets, telegraphed timed floor spikes, retained-life respawns, a responsive sprite legend, pixel presentation, and reproducible/debug URLs.
 
-Next: the wanderer, moving blades, controller input, reactive audio, and local leaderboards.
+Next: moving blades, controller input, reactive audio, and local leaderboards.

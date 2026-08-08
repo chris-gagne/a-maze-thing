@@ -14,6 +14,7 @@ import {
   getHunterGridPosition,
   getLifeTargetGridPosition,
   getPlayerGridPosition,
+  getWandererGridPosition,
   getSpikePhase,
   HUNTER_DIRECTION_PRIORITY,
   queuePlayerDirection,
@@ -210,6 +211,109 @@ describe('stage simulation', () => {
       progress: 0,
       revealed: true,
       active: true,
+    })
+  })
+
+  it('spawns the Wanderer on schedule and triggers at five walkable tiles', () => {
+    const maze = generatePerfectMaze(8, 8, 112)
+    const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
+    const route = routeBetween(maze, entranceIndex, 7)
+    const simulation = createStageSimulation(maze, {
+      wanderer: {
+        startCellIndex: route[6],
+        departureCellIndex: entranceIndex,
+        spawnSeconds: 1,
+        routeSeed: 9,
+      },
+    })
+
+    updateStageSimulation(simulation, 0.9, 0, 0, 0, 0, 0)
+    expect(getWandererGridPosition(simulation)).toBeNull()
+
+    updateStageSimulation(simulation, 0.1, 0, 0, 0, 0, 0)
+    expect(simulation.wandererSpawns).toBe(1)
+    expect(simulation.wandererTriggers).toBe(0)
+
+    queuePlayerDirection(simulation, directionBetween(maze, route[0], route[1]))
+    updateStageSimulation(simulation, 1, 1, 0, 0, 0, 0)
+
+    expect(simulation.wanderer?.triggered).toBe(true)
+    expect(simulation.wandererTriggers).toBe(1)
+    expect(simulation.player.cellIndex).toBe(route[1])
+    expect(simulation.player.direction).toBeNull()
+    expect(simulation.player.queuedDirection).toBeNull()
+  })
+
+  it('combines an immediate spawn and proximity trigger into one simulation interruption', () => {
+    const maze = generatePerfectMaze(6, 6, 113)
+    const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
+    const route = routeBetween(maze, entranceIndex, 3)
+    const simulation = createStageSimulation(maze, {
+      wanderer: {
+        startCellIndex: route[2],
+        departureCellIndex: entranceIndex,
+        spawnSeconds: 0.5,
+        routeSeed: 10,
+      },
+    })
+
+    updateStageSimulation(simulation, 0.5, 0, 0, 0, 0, 1.5)
+
+    expect(simulation.wandererSpawns).toBe(1)
+    expect(simulation.wandererTriggers).toBe(1)
+    expect(simulation.wanderer).toMatchObject({ spawned: true, triggered: true, progress: 0 })
+  })
+
+  it('departs at Start while untriggered', () => {
+    const maze = generatePerfectMaze(10, 10, 114)
+    const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
+    const route = routeBetween(maze, entranceIndex, 9)
+    const simulation = createStageSimulation(maze, {
+      wanderer: {
+        startCellIndex: route[1],
+        departureCellIndex: entranceIndex,
+        spawnSeconds: 0,
+        routeSeed: 11,
+      },
+    })
+    simulation.player.cellIndex = route[8]
+
+    updateStageSimulation(simulation, 1, 0, 0, 0, 0, 1)
+
+    expect(simulation.wanderer?.departed).toBe(true)
+    expect(getWandererGridPosition(simulation)).toBeNull()
+  })
+
+  it('deals Wanderer damage and preserves exact state after reserve-life loss', () => {
+    const maze = generatePerfectMaze(8, 8, 115)
+    const entranceIndex = toIndex(maze.entrance.x, maze.entrance.y, maze.width)
+    const simulation = createStageSimulation(maze, {
+      wanderer: {
+        startCellIndex: entranceIndex,
+        departureCellIndex: entranceIndex,
+        spawnSeconds: 0,
+        routeSeed: 12,
+      },
+      lives: MAX_LIVES,
+    })
+    Object.assign(simulation.wanderer!, {
+      spawned: true,
+      triggered: true,
+      previousCellIndex: 3,
+      routeDecisionCount: 4,
+    })
+
+    updateStageSimulation(simulation, 0.1, 0, 0, 0, 0, 0)
+
+    expect(simulation.lives).toBe(1)
+    expect(simulation.lastDamageSource).toBe(DamageSource.Wanderer)
+    expect(simulation.wanderer).toMatchObject({
+      cellIndex: entranceIndex,
+      previousCellIndex: 3,
+      spawned: true,
+      triggered: true,
+      departed: false,
+      routeDecisionCount: 4,
     })
   })
 

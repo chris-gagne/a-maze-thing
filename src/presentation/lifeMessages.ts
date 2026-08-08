@@ -18,6 +18,10 @@ const LIFE_MESSAGES: Readonly<Record<DamageSourceValue, LifeMessage>> = {
     cause: 'THE FLOOR BIT BACK.',
     finalCause: 'THE MAZE CLAIMED ITS LAST LIFE.',
   },
+  [DamageSource.Wanderer]: {
+    cause: 'THE WANDERER FOUND YOU.',
+    finalCause: 'THE WANDERER ENDED THE RUN.',
+  },
 }
 
 export function getLifeMessage(source: DamageSourceValue): LifeMessage {

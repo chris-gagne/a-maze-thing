@@ -6,6 +6,7 @@ import {
   getHunterGridPosition,
   getLifeTargetGridPosition,
   getPlayerGridPosition,
+  getWandererGridPosition,
   queuePlayerDirection,
   type StageSimulation,
   updateStageSimulation,
@@ -15,6 +16,7 @@ import { INITIAL_LIVES } from '../game/lifeRules'
 import {
   DEFAULT_DIFFICULTY,
   DIFFICULTY_PRESETS,
+  Difficulty,
   getDifficultyPreset,
   parseDifficulty,
   type DifficultyId,
@@ -34,6 +36,7 @@ import { placeLifeTarget } from '../generation/lifeTargetPlacement'
 import { generateMaze, type Maze, Wall } from '../generation/maze'
 import { placePortals } from '../generation/portalPlacement'
 import { placeSpikes } from '../generation/spikePlacement'
+import { placeWanderer } from '../generation/wandererPlacement'
 import { createPixelTextures, TextureKey } from '../presentation/pixelTextures'
 import { getLifeMessage } from '../presentation/lifeMessages'
 
@@ -49,6 +52,8 @@ const HUNTER_RELEASE_DELAY_SECONDS = 2.4
 const LIFE_TARGET_SPEED = 3
 const RESPAWN_PAUSE_MILLISECONDS = 1250
 const AMBUSH_PAUSE_MILLISECONDS = 1000
+const WANDERER_PAUSE_MILLISECONDS = 1000
+const WANDERER_SPEED = 1.5
 const DIFFICULTY_COLORS: Readonly<Record<DifficultyId, number>> = {
   casual: 0x79f25f,
   'easy-peasy': 0x42e8df,
@@ -92,6 +97,7 @@ export class PlayScene extends Phaser.Scene {
   private stageIntroduction: Phaser.GameObjects.Container | null = null
   private respawnOverlay: Phaser.GameObjects.Container | null = null
   private ambushOverlay: Phaser.GameObjects.Container | null = null
+  private wandererOverlay: Phaser.GameObjects.Container | null = null
   private pauseMenu: Phaser.GameObjects.Container | null = null
   private observedPortalReturnArmed = false
   private maze!: Maze
@@ -99,6 +105,7 @@ export class PlayScene extends Phaser.Scene {
   private mazeOrigin = { x: 0, y: MAZE_TOP }
   private hunterSprite: Phaser.GameObjects.Image | null = null
   private ambusherSprite: Phaser.GameObjects.Image | null = null
+  private wandererSprite: Phaser.GameObjects.Image | null = null
   private lifeTargetSprite: Phaser.GameObjects.Image | null = null
   private playerSprite!: Phaser.GameObjects.Image
   private startMarker!: Phaser.GameObjects.Graphics
@@ -119,6 +126,8 @@ export class PlayScene extends Phaser.Scene {
   private observedLivesGained = 0
   private observedPortalUses = 0
   private observedAmbusherReveals = 0
+  private observedWandererSpawns = 0
+  private observedWandererTriggers = 0
 
   constructor() {
     super('play')
@@ -126,20 +135,23 @@ export class PlayScene extends Phaser.Scene {
 
   init(data: Partial<RunSceneData> = {}): void {
     const searchParams = new URLSearchParams(location.search)
+    const debugMode = searchParams.get('debug') === 'maze'
     const requestedSeed = parseRunSeed(searchParams.get('seed'))
     const requestedDifficulty = parseDifficulty(searchParams.get('difficulty'))
     const requestedStage = parseDebugStage(
       searchParams.get('stage'),
-      searchParams.get('debug') === 'maze',
+      debugMode,
     )
     this.stageNumber = data.stageNumber ?? requestedStage ?? 1
     this.carriedScore = data.carriedScore ?? 0
     this.runSeed = data.runSeed ?? requestedSeed ?? createRandomRunSeed()
     this.lives = data.lives ?? INITIAL_LIVES
     this.stageEntryLives = this.lives
-    this.difficulty = data.difficulty ?? requestedDifficulty ?? DEFAULT_DIFFICULTY
+    this.difficulty = debugMode
+      ? Difficulty.EasyPeasy
+      : data.difficulty ?? requestedDifficulty ?? DEFAULT_DIFFICULTY
     this.difficultySelectionRequired = data.selectDifficulty
-      ?? (data.difficulty === undefined && (requestedSeed === null || requestedDifficulty === null))
+      ?? (!debugMode && data.difficulty === undefined && (requestedSeed === null || requestedDifficulty === null))
     this.selectedDifficultyIndex = DIFFICULTY_PRESETS.findIndex((preset) => {
       return preset.id === DEFAULT_DIFFICULTY
     })
@@ -152,6 +164,7 @@ export class PlayScene extends Phaser.Scene {
     this.stageIntroduction = null
     this.respawnOverlay = null
     this.ambushOverlay = null
+    this.wandererOverlay = null
     this.pauseMenu = null
     this.difficultyMenu = null
     this.observedPortalReturnArmed = false
@@ -161,11 +174,14 @@ export class PlayScene extends Phaser.Scene {
     this.ambusherBranchIndices = []
     this.hunterSprite = null
     this.ambusherSprite = null
+    this.wandererSprite = null
     this.lifeTargetSprite = null
     this.observedLivesLost = 0
     this.observedLivesGained = 0
     this.observedPortalUses = 0
     this.observedAmbusherReveals = 0
+    this.observedWandererSpawns = 0
+    this.observedWandererTriggers = 0
   }
 
   create(): void {
@@ -206,6 +222,9 @@ export class PlayScene extends Phaser.Scene {
           portalReservations,
         )
       : null
+    const wandererPlacement = fullGame
+      ? placeWanderer(this.stageNumber, stageSeed ^ 0x7a11de)
+      : null
     this.ambusherBranchIndices = ambusherPlacement?.branchIndices ?? []
     const spikeReservations = ambusherPlacement === null
       ? portalReservations
@@ -230,6 +249,7 @@ export class PlayScene extends Phaser.Scene {
       : { indices: [], loopAnchors: [] }
     this.loopAnchors = coinPlacement.loopAnchors
     const entranceIndex = this.maze.entrance.y * this.maze.width + this.maze.entrance.x
+    const exitIndex = this.maze.exit.y * this.maze.width + this.maze.exit.x
     this.simulation = createStageSimulation(this.maze, {
       coinIndices: coinPlacement.indices,
       hunter: fullGame
@@ -241,6 +261,14 @@ export class PlayScene extends Phaser.Scene {
       ambusher: ambusherPlacement === null
         ? undefined
         : { startCellIndex: ambusherPlacement.cellIndex },
+      wanderer: wandererPlacement === null
+        ? undefined
+        : {
+            startCellIndex: exitIndex,
+            departureCellIndex: entranceIndex,
+            spawnSeconds: wandererPlacement.spawnSeconds,
+            routeSeed: wandererPlacement.routeSeed,
+          },
       lifeTarget: lifeTargetIndex === null ? undefined : { startCellIndex: lifeTargetIndex },
       spikes: spikePlacement,
       portalIndices,
@@ -263,6 +291,9 @@ export class PlayScene extends Phaser.Scene {
     }
     if (ambusherPlacement !== null) {
       presentFeatureIds.push(StageFeature.Ambusher)
+    }
+    if (wandererPlacement !== null) {
+      presentFeatureIds.push(StageFeature.Wanderer)
     }
 
     const introduction = selectStageIntroduction(
@@ -308,7 +339,7 @@ export class PlayScene extends Phaser.Scene {
       return
     }
 
-    if (this.respawnOverlay !== null || this.ambushOverlay !== null) {
+    if (this.respawnOverlay !== null || this.ambushOverlay !== null || this.wandererOverlay !== null) {
       return
     }
 
@@ -328,11 +359,14 @@ export class PlayScene extends Phaser.Scene {
     while (this.accumulator >= FIXED_STEP_SECONDS) {
       const livesLostBeforeUpdate = this.simulation.livesLost
       const ambusherRevealsBeforeUpdate = this.simulation.ambusherReveals
+      const wandererSpawnsBeforeUpdate = this.simulation.wandererSpawns
+      const wandererTriggersBeforeUpdate = this.simulation.wandererTriggers
       updateStageSimulation(
         this.simulation,
         FIXED_STEP_SECONDS * getDifficultyPreset(this.difficulty).simulationSpeedMultiplier,
         PLAYER_SPEED,
         HUNTER_SPEED,
+        WANDERER_SPEED,
         LIFE_TARGET_SPEED,
         HUNTER_SPEED,
       )
@@ -341,6 +375,8 @@ export class PlayScene extends Phaser.Scene {
       if (
         this.simulation.livesLost > livesLostBeforeUpdate
         || this.simulation.ambusherReveals > ambusherRevealsBeforeUpdate
+        || this.simulation.wandererSpawns > wandererSpawnsBeforeUpdate
+        || this.simulation.wandererTriggers > wandererTriggersBeforeUpdate
       ) {
         this.accumulator = 0
         break
@@ -349,6 +385,7 @@ export class PlayScene extends Phaser.Scene {
 
     this.syncPresentation()
     this.syncAmbusherEvents()
+    this.syncWandererEvents()
     this.syncLifeEvents()
     this.syncPortalEvents()
     this.syncStartReturnMarker()
@@ -511,6 +548,15 @@ export class PlayScene extends Phaser.Scene {
         this.cellCenterY(ambusherPosition.y),
         TextureKey.Ambusher,
       ).setDepth(4).setAlpha(0)
+    }
+
+    if (this.simulation.wanderer !== null) {
+      const wandererCell = this.maze.cells[this.simulation.wanderer.spawnCellIndex]
+      this.wandererSprite = this.add.image(
+        this.cellCenterX(wandererCell.x),
+        this.cellCenterY(wandererCell.y),
+        TextureKey.Wanderer,
+      ).setDepth(4).setVisible(false)
     }
 
     const lifeTargetPosition = getLifeTargetGridPosition(this.simulation)
@@ -699,6 +745,7 @@ export class PlayScene extends Phaser.Scene {
       || this.stageResolved
       || this.respawnOverlay !== null
       || this.ambushOverlay !== null
+      || this.wandererOverlay !== null
       || this.stageIntroduction !== null
       || this.runRestarting
     ) {
@@ -1000,6 +1047,16 @@ export class PlayScene extends Phaser.Scene {
       this.ambusherSprite.setAlpha(this.simulation.ambusher?.revealed ? 1 : 0)
     }
 
+    const wandererPosition = getWandererGridPosition(this.simulation)
+    if (wandererPosition === null) {
+      this.wandererSprite?.setVisible(false)
+    } else {
+      this.wandererSprite?.setVisible(true).setPosition(
+        this.cellCenterX(wandererPosition.x),
+        this.cellCenterY(wandererPosition.y),
+      ).setAlpha(this.simulation.wanderer?.triggered ? 1 : 0.72)
+    }
+
     const lifeTargetPosition = getLifeTargetGridPosition(this.simulation)
     if (lifeTargetPosition === null) {
       this.lifeTargetSprite?.destroy()
@@ -1076,6 +1133,46 @@ export class PlayScene extends Phaser.Scene {
     this.time.delayedCall(AMBUSH_PAUSE_MILLISECONDS, () => {
       this.ambushOverlay?.destroy(true)
       this.ambushOverlay = null
+      this.tweens.resumeAll()
+      this.accumulator = 0
+    })
+  }
+
+  private syncWandererEvents(): void {
+    const spawned = this.simulation.wandererSpawns > this.observedWandererSpawns
+    const triggered = this.simulation.wandererTriggers > this.observedWandererTriggers
+    if (!spawned && !triggered) {
+      return
+    }
+
+    this.observedWandererSpawns = this.simulation.wandererSpawns
+    this.observedWandererTriggers = this.simulation.wandererTriggers
+    this.accumulator = 0
+    this.tweens.pauseAll()
+
+    const panel = this.add.rectangle(0, 0, 620, 190, 0x05080a, 0.97)
+    panel.setStrokeStyle(4, 0x9d7bff, 1)
+    const headline = this.add.text(0, -34, triggered ? 'WANDERER TRIGGERED!' : 'WANDERER ENTERS', {
+      fontFamily: '"Press Start 2P"',
+      fontSize: triggered ? '22px' : '25px',
+      color: '#c8b7ff',
+    }).setOrigin(0.5)
+    const prompt = this.add.text(0, 36, spawned && triggered ? 'IT FOUND YOU AT THE EXIT' : triggered
+      ? 'MOVE! IT IS HUNTING YOU'
+      : 'IT SEEKS THE START', {
+      fontFamily: '"Press Start 2P"',
+      fontSize: '12px',
+      color: '#f3fffe',
+    }).setOrigin(0.5)
+    this.wandererOverlay = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2, [
+      panel,
+      headline,
+      prompt,
+    ]).setDepth(25).setScrollFactor(0)
+
+    this.time.delayedCall(WANDERER_PAUSE_MILLISECONDS, () => {
+      this.wandererOverlay?.destroy(true)
+      this.wandererOverlay = null
       this.tweens.resumeAll()
       this.accumulator = 0
     })
@@ -1233,10 +1330,12 @@ export class PlayScene extends Phaser.Scene {
       {
         ambusherPlaced: this.simulation.ambusher !== null,
         ambusherRevealed: this.simulation.ambusherReveals > 0,
+        wandererSpawned: this.simulation.wanderer?.spawned ?? false,
+        wandererDeparted: this.simulation.wanderer?.departed ?? false,
       },
     )
     const totalScore = this.carriedScore + award.awardedCoins
-    const bonusRows = Number(award.coinMonger) + Number(award.survivedAmbush)
+    const bonusRows = Number(award.coinMonger) + Number(award.survivedAmbush) + Number(award.evadedWanderer)
     const panelHeight = 188 + bonusRows * 46
     const panelWidth = bonusRows > 0 ? 650 : 520
     const panel = this.add.rectangle(
@@ -1274,8 +1373,20 @@ export class PlayScene extends Phaser.Scene {
       }).setOrigin(0.5).setDepth(21).setScrollFactor(0)
     }
 
+    if (award.evadedWanderer && !casual) {
+      const wandererY = headlineY + 58
+        + (award.coinMonger ? 42 : 0)
+        + (award.survivedAmbush ? 42 : 0)
+      this.add.text(GAME_WIDTH / 2, wandererY, 'EVADING THE WANDERER  +25', {
+        fontFamily: '"Press Start 2P"',
+        fontSize: '16px',
+        color: '#c8b7ff',
+      }).setOrigin(0.5).setDepth(21).setScrollFactor(0)
+    }
+
     if (!casual) {
-      const scoreLine = `${award.baseCoins} COINS + ${award.bonusCoins + award.ambushBonusCoins} BONUS  //  TOTAL ${totalScore}`
+      const bonusCoins = award.bonusCoins + award.ambushBonusCoins + award.wandererBonusCoins
+      const scoreLine = `${award.baseCoins} COINS + ${bonusCoins} BONUS  //  TOTAL ${totalScore}`
       this.add.text(
         GAME_WIDTH / 2,
         GAME_HEIGHT / 2 + panelHeight / 2 - 38,
