@@ -2,10 +2,14 @@
 
 An endless, score-driven 2D arcade game built with Phaser, TypeScript, and Vite. Each stage is a seeded, sparsely braided maze: collect coins, use alternate routes to misdirect the hunter, and reach the exit.
 
+[Play A-Maze-Thing](https://white-sea-06dd1bb10.7.azurestaticapps.net/)
+
 ## Run locally
 
+Requires Node.js 24 and npm 11.
+
 ```powershell
-npm install
+npm ci
 npm run dev
 ```
 
@@ -124,3 +128,7 @@ The deterministic game modules do not depend on Phaser. Rendering runs at the br
 ## Current slice
 
 Implemented: four run difficulties, maze-only Casual Mode, scalable gameplay timing, five-band maze growth through Stage 50, increasingly braided route profiles, scrolling late-stage worlds, deterministic post-cap variations, reusable dead-end escape portals, loop-biased coin clusters, continuous buffered movement, optional coins, stage progression, run-scoped feature briefings, one delayed hunter with stable route choices, hidden Stage 11+ Ambushers with a 25-coin survival challenge, seeded Stage 21+ Wanderers with evasion rewards, scarce evasive extra-life targets, telegraphed timed floor spikes, route-changing Stage 6+ Maze Shutters, retained-life respawns, reactive procedural audio, tagged local leaderboards with deterministic seed replay, a responsive sprite legend, pixel presentation, and reproducible/debug URLs.
+
+## License
+
+Licensed under the [MIT License](LICENSE).
