@@ -42,5 +42,7 @@ describe('pixel patterns', () => {
       .toBe(TextureKey.Hunter)
     expect(LEGEND_ENTRIES.find((entry) => entry.name === 'Ambusher')?.textureKey)
       .toBe(TextureKey.Ambusher)
+    expect(LEGEND_ENTRIES.find((entry) => entry.name === 'Wanderer')?.textureKey)
+      .toBe(TextureKey.Wanderer)
   })
 })
