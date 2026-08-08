@@ -16,29 +16,29 @@ interface StartLegendEntry {
 export type LegendEntry = TextureLegendEntry | StartLegendEntry
 
 export const LEGEND_ENTRIES: readonly LegendEntry[] = [
-  { name: 'Player', rule: 'Your runner through the maze.', textureKey: TextureKey.Player },
-  { name: 'Hunter', rule: 'Follows your route through the maze.', textureKey: TextureKey.Hunter },
+  { name: 'Player', rule: 'You. Run accordingly.', textureKey: TextureKey.Player },
+  { name: 'Hunter', rule: 'It follows. You flee.', textureKey: TextureKey.Hunter },
   {
     name: 'Ambusher',
-    rule: 'Expose it, then escape for a 25-coin survival bonus.',
+    rule: 'Wake it. Escape it. +25.',
     textureKey: TextureKey.Ambusher,
   },
   {
     name: 'Wanderer',
-    rule: 'Wanders from Exit to Start. Keep clear and escape for +25.',
+    rule: 'Keep clear. Escape first. +25.',
     textureKey: TextureKey.Wanderer,
   },
-  { name: 'Coin', rule: 'Collect every coin before exiting for a 2X stage award.', textureKey: TextureKey.Coin },
-  { name: 'Exit', rule: 'Completes the current stage.', textureKey: TextureKey.Exit },
-  { name: 'Extra Life', rule: 'Catch it to gain one life.', textureKey: TextureKey.LifeTarget },
+  { name: 'Coin', rule: 'Clean sweep earns 2X.', textureKey: TextureKey.Coin },
+  { name: 'Exit', rule: 'Your way out. Allegedly.', textureKey: TextureKey.Exit },
+  { name: 'Extra Life', rule: 'Catch it. Pocket a life.', textureKey: TextureKey.LifeTarget },
   {
     name: 'Spikes',
-    rule: 'Amber warns; coral hurts you and blocks enemies.',
+    rule: 'Amber warns. Coral bites and blocks.',
     textureKey: TextureKey.Spike,
     spikePhases: true,
   },
-  { name: 'Portal', rule: 'Links Start to your last-used portal.', textureKey: TextureKey.Portal },
-  { name: 'Start', rule: 'A pulsing portal dot returns to your last portal.', textureKey: null },
+  { name: 'Portal', rule: 'Back to Start. Reusable.', textureKey: TextureKey.Portal },
+  { name: 'Start', rule: 'Return trip to your last portal.', textureKey: null },
 ]
 
 export const LEGEND_TEXTURE_KEYS: readonly TextureKeyValue[] = LEGEND_ENTRIES.flatMap(
@@ -102,8 +102,8 @@ function createLegendItem(entry: LegendEntry): HTMLLIElement {
 function createPatternCanvas(textureKey: TextureKeyValue): HTMLCanvasElement {
   const pattern = PIXEL_PATTERNS[textureKey]
   const canvas = document.createElement('canvas')
-  canvas.width = pattern.rows[0].length
-  canvas.height = pattern.rows.length
+  canvas.width = pattern.rows[0].length * pattern.pixelSize
+  canvas.height = pattern.rows.length * pattern.pixelSize
   canvas.setAttribute('aria-hidden', 'true')
   const context = canvas.getContext('2d')
 
@@ -116,7 +116,12 @@ function createPatternCanvas(textureKey: TextureKeyValue): HTMLCanvasElement {
       const color = pattern.palette[row[x]]
       if (color !== undefined) {
         context.fillStyle = `#${color.toString(16).padStart(6, '0')}`
-        context.fillRect(x, y, 1, 1)
+        context.fillRect(
+          x * pattern.pixelSize,
+          y * pattern.pixelSize,
+          pattern.pixelSize,
+          pattern.pixelSize,
+        )
       }
     }
   })
