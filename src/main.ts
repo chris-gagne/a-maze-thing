@@ -55,7 +55,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
     </aside>
   </div>
   <footer class="system-footer">
-    <span>LOCAL ARCADE // BUILD 001</span>
+    <span>LOCAL ARCADE // BUILD ${__APP_VERSION__}</span>
     <span>PROCEDURAL SIGNAL ACTIVE</span>
   </footer>
 `
