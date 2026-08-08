@@ -103,6 +103,7 @@ function createLegendItem(entry: LegendEntry): HTMLLIElement {
 function createPatternCanvas(textureKey: TextureKeyValue): HTMLCanvasElement {
   const pattern = PIXEL_PATTERNS[textureKey]
   const canvas = document.createElement('canvas')
+  canvas.classList.add('legend-sprite', `legend-sprite--${textureKey}`)
   canvas.width = pattern.rows[0].length * pattern.pixelSize
   canvas.height = pattern.rows.length * pattern.pixelSize
   canvas.setAttribute('aria-hidden', 'true')

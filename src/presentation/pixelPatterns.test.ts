@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { LEGEND_TEXTURE_KEYS } from './spriteLegend'
+import { LEGEND_ENTRIES, LEGEND_TEXTURE_KEYS } from './spriteLegend'
 import { PIXEL_PATTERNS, TextureKey } from './pixelPatterns'
 
 describe('pixel patterns', () => {
@@ -23,5 +23,26 @@ describe('pixel patterns', () => {
 
   it('includes every gameplay texture in the sprite legend', () => {
     expect([...LEGEND_TEXTURE_KEYS].sort()).toEqual(Object.values(TextureKey).sort())
+  })
+
+  it('gives each character a distinct silhouette and uses redesigned enemies in the legend', () => {
+    const silhouette = (textureKey: TextureKey): string => PIXEL_PATTERNS[textureKey].rows
+      .map((row) => Array.from(row, (paletteKey) => paletteKey === '0' ? '0' : '1').join(''))
+      .join('\n')
+    const characterTextureKeys = [
+      TextureKey.Player,
+      TextureKey.Hunter,
+      TextureKey.Ambusher,
+      TextureKey.Wanderer,
+    ]
+
+    expect(new Set(characterTextureKeys.map(silhouette)).size).toBe(characterTextureKeys.length)
+
+    expect(LEGEND_ENTRIES.find((entry) => entry.name === 'Hunter')?.textureKey)
+      .toBe(TextureKey.Hunter)
+    expect(LEGEND_ENTRIES.find((entry) => entry.name === 'Ambusher')?.textureKey)
+      .toBe(TextureKey.Ambusher)
+    expect(LEGEND_ENTRIES.find((entry) => entry.name === 'Wanderer')?.textureKey)
+      .toBe(TextureKey.Wanderer)
   })
 })
