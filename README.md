@@ -1,134 +1,189 @@
-# A-Maze-Thing
+<div align="center">
+<img src="docs/readme-marquee.svg" alt="A-Maze-Thing: endless digital labyrinth" width="100%" />
+<p><strong>Hoard coins. Read the maze. Avoid becoming a cautionary stain.</strong></p>
+<p>
+<a href="https://white-sea-06dd1bb10.7.azurestaticapps.net/"><img src="https://img.shields.io/badge/PLAY_NOW-SYSTEM_READY-79f25f?style=for-the-badge&amp;labelColor=071318" alt="Play now: system ready" /></a>
+<img src="https://img.shields.io/badge/TypeScript-6-42e8df?style=for-the-badge&amp;labelColor=071318" alt="TypeScript 6" />
+<img src="https://img.shields.io/badge/Phaser-4-ffb629?style=for-the-badge&amp;labelColor=071318" alt="Phaser 4" />
+<img src="https://img.shields.io/badge/DANGER-GUARENTEED-d9364b?style=for-the-badge&amp;labelColor=071318" alt="Danger: guarenteed" />
+</p>
+</div>
 
-An endless, score-driven 2D arcade game built with Phaser, TypeScript, and Vite. Each stage is a seeded, sparsely braided maze: collect coins, use alternate routes to misdirect the hunter, and reach the exit.
+## Insert Coin
 
-[Play A-Maze-Thing](https://white-sea-06dd1bb10.7.azurestaticapps.net/)
+**A-Maze-Thing** is an endless, score-driven arcade labyrinth built from deterministic seeds. Every stage creates a new sparsely braided maze with alternate routes, suspicious dead ends, useful portals, optional riches, and a growing list of things that have noticed you.
 
-## Run locally
+Your assignment is refreshingly simple:
 
-Requires Node.js 24 and npm 11.
+1. Leave **Start**.
+2. Collect as many coins as courage permits.
+3. Reach the **Exit**.
+4. Do not let the maze collect *you*.
+
+Movement continues until blocked, so decisions happen at junctions. The Hunter sleeps until your first move, then enters from Start after a short and frankly insufficient grace period. Clear a stage and the labyrinth expands; by Stage 50 it reaches `41x37`, with a tracking camera and no minimap to hold your hand.
+
+> **LIVE ARCADE SIGNAL:** [Play A-Maze-Thing](https://white-sea-06dd1bb10.7.azurestaticapps.net/)
+
+## How To Play
+
+### Controls
+
+| Signal | Action |
+|---|---|
+| Arrow keys / `WASD` | Queue your next direction at a legal junction |
+| `Enter` / `Space` / click / tap | Select, confirm, or dismiss a briefing |
+| `Escape` | Pause or return to the active run |
+| `T` while paused | Retry the current stage from its starting state |
+| `R` while paused or at game over | Retry the same seed from Stage 1 |
+| `Enter` while paused or at game over | Start a new run |
+| `L` on a menu | Open local scores |
+| `M` / speaker button | Mute or restore procedural audio |
+
+On the leaderboard, use Left / Right to change difficulty, Up / Down to select a score, and `Enter`, `Space`, or `R` to replay its seed. `C` clears the visible board after confirmation; `Escape` returns. Initials use three `A-Z` characters and can be typed or adjusted with the arrow keys.
+
+### Pick Your Poison
+
+| Mode | Official safety assessment |
+|---|---|
+| **CASUAL MODE** | All maze, no menace. No coins, enemies, traps, lives, or portals. The walls are the only thing judging you. |
+| **EASY PEASY** | Full systems at half speed. Danger has been asked to walk. |
+| **NORMAL** | Factory settings. The maze cheats only the approved amount. |
+| **OVERCLOCKED** | Everything at 150%. Warranty status: extremely void. |
+
+Normal is selected by default. Retrying a stage or seed preserves its difficulty; a new run returns to the selector.
+
+### Maze Signals
+
+| Signal | What it means |
+|---|---|
+| <span style="color:#42e8df">**CYAN**</span> | You, portals, and generally promising technology |
+| <span style="color:#ffb629">**AMBER**</span> | Coins, warnings, and the maze politely clearing its throat |
+| <span style="color:#ff5364">**CORAL**</span> | Active danger, closed shutters, and poor immediate prospects |
+| <span style="color:#79f25f">**LIME**</span> | Exits, extra lives, and statistically rare good news |
+
+### Things In The Dark
+
+- **Coins** are optional. Collect every coin before escaping to trigger `COIN MONGER!` and double that stage's coin award.
+- **Portals** hide in distant dead ends. They return you to Start; revisit Start to jump back to the last portal used. The rest of the maze does not pause for transit.
+- **Extra Life** is guaranteed on Stage 2 when you have one life. Catch the evasive target to hold one reserve; later chances are scarce.
+- **Spikes** telegraph in amber before becoming dangerous. Active spikes hurt you and temporarily block enemy routes.
+- **Maze Shutters** arrive from Stage 6, sealing only loop shortcuts. Coral means reroute; an original path always remains.
+- **The Ambusher** may wait in a deep branch from Stage 11. Reveal it, survive, and escape for `+25`.
+- **The Wanderer** enters through the Exit from Stage 21. Keep your distance and escape while it remains for `+25`; get too close and it stops wandering.
+- **The Hunter** follows from the entrance. It is patient, deterministic, and not open to mediation.
+
+Runs begin with one life and can hold two. Losing a reserve resets you and the Hunter while preserving collected coins and the hazard clock. Losing the final life ends the run. Easy Peasy, Normal, and Overclocked each maintain a browser-local top ten ranked by coins, then stage, then earliest result. Scores and initials never leave your browser.
+
+## Power Up Locally
+
+### Requirements
+
+- [Node.js 24](https://nodejs.org/) (`>=24 <25`)
+- npm 11 (the repository pins `npm@11.9.0`)
 
 ```powershell
+git clone <repository-url>
+cd a-maze-thing
 npm ci
 npm run dev
 ```
 
-Create a production build with `npm run build` and run the deterministic test suite with `npm test`.
+Vite will print the local arcade URL, normally `http://localhost:5173`.
 
-## Controls
+| Command | Function |
+|---|---|
+| `npm run dev` | Start the Vite development server |
+| `npm test` | Run the deterministic Vitest suite once |
+| `npm run build` | Type-check and create a production build in `dist/` |
+| `npm run preview` | Serve the production build locally |
 
-- On the first run or a New Run, `Up` / `Down` or `W` / `S`: choose difficulty
-- On the difficulty selector, `Enter`, `Space`, click, or tap: start the selected mode
-- Arrow keys or `WASD`: queue a direction at the next legal junction
-- `Escape`: pause or return to the game during active gameplay
-- While paused, `T`: retry the current level from its starting state
-- While paused, `R`: retry the same seed from Stage 1
-- While paused, `Enter`: start a new run with a fresh seed
-- `Enter`, `Space`, click, or tap: dismiss a stage briefing
-- On game over, `Enter`: start a new run with a fresh seed
-- On game over, `R`: retry the same seed from Stage 1
-- On the difficulty selector or game over, `L` or `LOCAL SCORES`: open the leaderboards
-- During initials entry, type three letters; use Left / Right to select and Up / Down to change a slot; `Enter` confirms
-- On the leaderboards, Left / Right changes difficulty, Up / Down selects a score, and `Enter` or `Space` replays its seed
-- On the leaderboards, `R` or `REPLAY SEED` restarts the selected run; `C` or `CLEAR BOARD` requires a second confirmation
-- On the leaderboards, `Escape` or `BACK` returns to the previous menu
-- `M` or the masthead speaker button: mute or unmute audio
+No API keys, database, downloaded game art, or audio assets are required. Browser storage is used only for mute preference and local leaderboards.
 
-Movement continues until blocked. The hunter remains dormant until the player starts moving, then follows from the entrance after a short delay.
+## System Blueprint
 
-## Difficulty
+The project keeps deterministic simulation away from rendering concerns. Phaser is the cabinet; the game rules are the machinery behind the glass.
 
-- `CASUAL MODE`: All maze, no menace. The walls are the only thing judging you. No coins, baddies, traps, Extra Life, or portals.
-- `EASY PEASY`: Full systems, half speed. Danger has been asked to walk.
-- `NORMAL`: Factory settings. The maze cheats only the approved amount.
-- `OVERCLOCKED`: Everything at 150%. Warranty status: extremely void.
+```mermaid
+flowchart LR
+		Input[Keyboard / Pointer] --> Scene[Phaser PlayScene]
+		Scene --> Simulation[Fixed-step Simulation]
+		Generation[Seeded Maze Generation] --> Simulation
+		Rules[Navigation / Hazards / Scoring] --> Simulation
+		Simulation --> Scene
+		Simulation --> Observer[Stage Audio Observer]
+		Observer --> Audio[Procedural Web Audio]
+		Scene --> Pixels[Generated Pixel Textures]
+		Storage[(Local Storage)] <--> Scores[Leaderboard Repository]
+		Scores <--> Scene
+```
 
-The first run and every `NEW RUN` open the difficulty selector with Normal preselected. Press Enter for the default or deliberately choose another signal. `RETRY LEVEL` and `RETRY SEED` preserve the active difficulty. Easy Peasy and Overclocked scale gameplay movement, enemy release, and hazard timing together; menus and transitions remain at normal speed. Casual Mode keeps only the generated maze, Start, Exit, and player, replacing score and lives with a mode indicator.
+| Sector | Responsibility |
+|---|---|
+| `src/generation/` | Seeded PRNG, maze carving and braiding, endpoints, portals, coins, enemies, spikes, and shutters |
+| `src/game/` | Framework-independent simulation, movement, navigation, scoring, progression, difficulty, seeds, and leaderboards |
+| `src/audio/` | Simulation observation, persistent settings, and the application-scoped procedural Web Audio engine |
+| `src/scenes/` | Phaser input, camera, menus, HUD, and rendering adapter |
+| `src/presentation/` | Original pixel patterns, generated textures, legend, and player-facing messages |
 
-Entity movement uses a deliberately measured baseline: all runners and pursuers move at 75% of the original prototype pace. Their relative roles remain unchanged, and difficulty multipliers apply on top of these revised speeds. Release delays, spawn schedules, hazards, alerts, and transitions retain their existing timing.
+### Technology Stack
 
-Escape opens a pause menu during active gameplay. While paused, simulation time, movement, hazards, and gameplay animations freeze. `RETURN TO GAME` preserves the exact stage state. `RETRY LEVEL` rebuilds the current level with the same layout, score carried from earlier levels, and lives held when the level began; progress and life changes from the discarded attempt are reset, and dismissed feature briefings do not repeat. `RETRY SEED` starts a clean Stage 1 run with the same seed and difficulty, while `NEW RUN` opens the difficulty selector for a fresh seed. Both run-level actions reset score, lives, stage progress, and feature discoveries. Pause is unavailable during briefings, life-loss interruptions, stage transitions, and game over.
+- **TypeScript 6** for strict, explicit game logic
+- **Phaser 4** for browser rendering, input, cameras, and scene orchestration
+- **Vite 8** for development and production builds
+- **Vitest 4** for deterministic unit and simulation tests
+- **Web Audio API** for a fully procedural soundtrack and cues
+- **Azure Static Web Apps** for the live build
 
-Coins are optional, but collecting every coin before reaching the exit earns the `COIN MONGER!` bonus and doubles that stage's coin award. The multiplier applies only when the stage is completed, never doubles score carried from earlier stages, and remains available after losing a reserve life because collected coins stay collected. A game over before the exit receives no bonus.
+Game state advances in fixed `1/120` second steps while Phaser renders at the browser frame rate. The deterministic modules do not depend on Phaser, which keeps generation and simulation fast to test and reproducible outside the scene.
 
-A fresh run opens with a short maze briefing. Later stages pause for one combined introduction only when their generated layout contains something not yet seen in that run, such as spikes or the evasive Extra Life. The maze simulation and hazard timers remain frozen until the briefing is dismissed; game over resets these discoveries for the next run.
+### Runtime Route
 
-Floor spikes damage the player only while active. They never damage hostile enemies, but active spikes block new hunter, Ambusher, and Wanderer routes; inactive, warning, and recovery phases remain traversable.
+1. A run seed and stage number derive the stage seed.
+2. The generator carves a perfect-maze foundation, then adds controlled loops and endpoints.
+3. Seeded placement modules add coins, portals, hazards, and eligible enemies without invalid overlaps.
+4. The framework-independent simulation resolves queued movement, collisions, pursuit, scoring, and timed blockers.
+5. `PlayScene` projects that state into pixel sprites, overlays, a fixed HUD, and a player-following camera.
+6. `StageAudioObserver` translates meaningful state changes into procedural cues without changing simulation timing.
 
-Beginning on Stage 6, Maze Shutters cycle across selected loop passages: four simulation seconds open, one second of passable amber warning, then three seconds closed. Closed coral gates block the player, Hunter, Ambusher, Wanderer, and Extra Life in both directions without causing damage. An entity already crossing finishes safely; a player waiting at a gate resumes when it opens or can queue another turn. Shutters appear once on Stages 6-15, twice on 16-30, and three times from Stage 31 onward when enough safe loop edges exist. Because they occupy only braid-added shortcuts, even every shutter closing together leaves an alternate route through the original maze. Their seeded, staggered cycles persist through reserve-life loss, scale with difficulty, freeze with the simulation, and are absent from Casual Mode.
+## Deterministic Runs
 
-Beginning on Stage 11, eligible full-game mazes hide one Ambusher at the end of a deep, single-entry branch outside Start's five-tile reveal radius. It remains invisible until the player reaches a tile within five walkable steps. The player finishes entering that tile, stops, and receives a one-second warning before the revealed Ambusher begins pursuing at hunter speed. After a reserve-life loss it returns to its hiding cell but remains visible and active. Expose the Ambusher and still reach the exit to earn the flat `SURVIVE THE AMBUSH +25` bonus; Coin Monger is calculated first and does not double this award. Stages without a qualifying five-tile branch contain no Ambusher, and Casual Mode remains maze-only.
-
-Beginning on Stage 21, a Wanderer enters every full-game maze at the Exit after a seeded delay of 5 to 60 simulation seconds. A one-second alert freezes play, then it wanders at 1.125 cells per Normal-mode second, choosing seeded random routes biased toward Start and avoiding active spikes. Reaching Start lets it leave. Coming within five walkable tiles permanently triggers hunter-speed pursuit; the player stops on the triggering tile for a one-second warning. An arrival already within range combines both warnings into one pause. Its exact position and mode survive a reserve-life loss. Escaping after it has spawned but before it leaves earns `EVADING THE WANDERER +25`, independently of Coin Monger and the Ambusher bonus; escaping before arrival earns nothing. Difficulty scales its schedule and movement in real time, and Casual Mode excludes it.
-
-Extra-life targets move more slowly than the hunter but prefer routes that increase their distance from the player. At a dead end or local maximum, they commit to a route toward a less-visited region of the maze instead of bouncing between the same cells.
-
-Each run starts with one life and can hold at most two. The evasive Extra Life is guaranteed on Stage 2 while one life remains; later replacement opportunities are scarce and random. Catching it grants the single reserve life. Losing that reserve resets the player and hunter, clears the Start return link, and pauses for 1.25 seconds with a cause-specific message. The Wanderer remains exactly where it was, including whether it was wandering or pursuing. Collected coins, caught targets, and the current hazard clock are preserved.
-
-Losing the final life opens a persistent run summary with the highest stage reached and total coins recovered. `NEW RUN` generates a pending fresh seed and opens the difficulty selector; the URL updates when a mode is confirmed. `RETRY SEED` restarts Stage 1 with the same generated stage sequence and difficulty. Both reset lives, score, and feature discoveries.
-
-Easy Peasy, Normal, and Overclocked each keep a separate browser-local top ten. Runs rank by total coins, then highest stage, then earliest achievement; zero-point games are not recorded. A qualifying game over asks for a three-letter `A-Z` tag before saving; beating an existing first place receives a distinct local-record celebration. The last confirmed tag is remembered and prefilled. Duplicate attempts are retained, including repeated runs on the same seed. Each row records tag, coins, stage, and seed, and can restart that deterministic seed from Stage 1 at its recorded difficulty. Clearing affects only the visible board and requires confirmation. Corrupt or unavailable browser storage never blocks play; scores remain usable for the current page when persistence fails. Casual Mode is excluded because it has no score or natural game over. Leaderboards are local to this browser and do not sync between devices.
-
-Some distant dead ends contain reusable portals. Entering one returns the player to the maze entrance while the hunter, collected coins, hazards, and other stage state continue unchanged. After leaving the entrance, a pulsing amber portal dot appears inside the red Start box; returning to Start then sends the player back to the last portal used. A newer portal replaces that return destination, and losing a life clears both the link and dot. Portals affect the player only.
-
-Audio is generated at runtime with the Web Audio API; there are no streamed tracks or external sound assets. A restrained maze pulse shifts from calm to pursuit and danger as enemies activate, while coins, portals, life changes, alerts, and results use short procedural signals. Recurring spike and shutter cues sound only when their phase changes within five walkable tiles, pan toward the hazard, and combine matching simultaneous events to keep late stages readable. Briefings, pause menus, life-loss interruptions, stage transitions, and game over suspend the pulse without replaying missed cues when play resumes.
-
-Browsers keep audio locked until the first pointer or keyboard gesture. The masthead speaker button and `M` toggle mute; that preference persists locally between visits. Muting stops the pulse scheduler and fades the master output rather than changing deterministic simulation timing.
-
-## Maze progression
-
-Maze size and route complexity now grow across five ten-stage bands:
-
-- Stages 1-10: small to medium, from `11x7` to `17x13`
-- Stages 11-20: medium to large, ending at `23x19`
-- Stages 21-30: large to extra large, ending at `29x25`
-- Stages 31-40: extra large to XXL, ending at `35x31`
-- Stages 41-50: XXL to XXXL, ending at the initial `41x37` cap
-
-Later bands add more junctions, interacting loops, and long loop-backs while retaining useful dead ends. Mazes larger than the play area keep the 48-pixel cell scale and use a player-following camera; the HUD remains fixed and there is no minimap. The Stage 50 cap is an initial calibration target for a three-to-four-minute first blind clear in Casual Mode and may be tuned from playtest results.
-
-Stage 51 and later remain at the size cap and rotate deterministic maze variations: compact interconnected loops, longer loop-backs, and qualified alternate boundary endpoints. Full-game modes also rotate between three, four, and five spikes; Casual Mode remains maze-only. Existing seed URLs remain deterministic but produce layouts from this revised generator rather than preserving layouts from earlier builds.
-
-## Reproducible runs
-
-Append a decimal or hexadecimal seed and canonical difficulty to the URL to launch a complete run directly:
+Share or replay a complete run by adding a decimal or hexadecimal seed and a canonical difficulty:
 
 ```text
 http://localhost:5173/?seed=4271&difficulty=normal
 http://localhost:5173/?seed=DEADBEEF&difficulty=overclocked
 ```
 
-The same run seed, difficulty, stage number, and retained-life state reproduce the same run. Maze geometry is identical across difficulties; mode controls which gameplay systems are present and how quickly simulation time advances. Retained lives matter because Extra Life targets appear only when the player has at most one life, and occupied cells are excluded from coin and spike placement.
+Supported difficulties are `casual`, `easy-peasy`, `normal`, and `overclocked`. Maze geometry is identical across difficulties; the selected mode changes active systems and simulation speed. The same seed, difficulty, stage, and retained-life state reproduce the same run.
 
-Append `&debug=maze` to highlight escape-loop paths, newly opened passages, and loop coin anchors:
+For generator inspection, enable maze debug signals:
 
 ```text
 http://localhost:5173/?seed=DEADBEEF&debug=maze
-```
-
-While maze debugging is enabled, append a positive stage number to inspect a progression or post-cap profile directly:
-
-```text
 http://localhost:5173/?seed=DEADBEEF&difficulty=casual&debug=maze&stage=50
 ```
 
-The `stage` override is ignored unless `debug=maze` is also present.
-Maze debug mode defaults to Easy Peasy timing and skips the difficulty selector. Add an explicit `difficulty` value to compare another mode directly.
+`debug=maze` highlights escape-loop paths, newly opened passages, and loop coin anchors. The `stage` override accepts a positive stage only while debug mode is active. Debug mode defaults to Easy Peasy timing and skips the difficulty selector unless a difficulty is explicit.
 
-## Architecture
+## Maze Escalation
 
-- `src/generation/`: seeded randomness, perfect-maze foundations, controlled escape loops, final endpoints, dead-end portals, coin placement, and fair spike placement
-- `src/game/`: framework-independent movement, scoring, local leaderboard ranking/persistence, blocker-aware enemy navigation, hunter pursuit, timed hazards, collision, and seed parsing
-- `src/audio/`: pure simulation observers, persistent settings, and the application-scoped procedural Web Audio engine
-- `src/scenes/`: Phaser input and rendering adapter
-- `src/presentation/`: generated original pixel textures
+| Stages | Size progression | New concerns |
+|---|---|---|
+| 1-10 | `11x7` to `17x13` | Core pursuit, Extra Life, shutters |
+| 11-20 | Up to `23x19` | Longer loops, eligible Ambushers |
+| 21-30 | Up to `29x25` | Wanderers and larger scrolling worlds |
+| 31-40 | Up to `35x31` | Denser interacting routes and more shutters |
+| 41-50 | Up to the `41x37` cap | Maximum pre-cap scale |
+| 51+ | Remains at `41x37` | Deterministic compact-loop, long-loop, and endpoint variants |
 
-The deterministic game modules do not depend on Phaser. Rendering runs at the browser frame rate while game state advances in fixed `1/120` second steps.
+Later mazes retain useful dead ends while adding junctions and interacting loops. Full-game stages beyond 50 also rotate hazard density. Casual Mode keeps only the maze, Start, Exit, and player at every stage.
 
-## Current slice
+## Audio Protocol
 
-Implemented: four run difficulties, maze-only Casual Mode, scalable gameplay timing, five-band maze growth through Stage 50, increasingly braided route profiles, scrolling late-stage worlds, deterministic post-cap variations, reusable dead-end escape portals, loop-biased coin clusters, continuous buffered movement, optional coins, stage progression, run-scoped feature briefings, one delayed hunter with stable route choices, hidden Stage 11+ Ambushers with a 25-coin survival challenge, seeded Stage 21+ Wanderers with evasion rewards, scarce evasive extra-life targets, telegraphed timed floor spikes, route-changing Stage 6+ Maze Shutters, retained-life respawns, reactive procedural audio, tagged local leaderboards with deterministic seed replay, a responsive sprite legend, pixel presentation, and reproducible/debug URLs.
+All sound is synthesized at runtime. There are no streamed tracks or external sound files. The maze pulse moves from calm to pursuit and danger as threats activate; coins, portals, alerts, lives, and results use short procedural signals. Nearby hazards pan toward their source and matching simultaneous cues are combined to keep late stages readable.
+
+Browsers unlock audio after the first keyboard or pointer gesture. `M` and the speaker control toggle mute, and the preference persists locally. Menus and interruptions suspend the pulse without replaying missed cues or disturbing deterministic time.
 
 ## License
 
-Licensed under the [MIT License](LICENSE).
+Licensed under the [MIT License](LICENSE). Enter freely. Exit availability may vary.
