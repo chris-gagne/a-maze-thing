@@ -26,6 +26,7 @@ export const AudioCueName = {
   DamageAmbusher: 'damage-ambusher',
   DamageWanderer: 'damage-wanderer',
   StageClear: 'stage-clear',
+  LocalRecord: 'local-record',
   GameOver: 'game-over',
   UiMove: 'ui-move',
   UiConfirm: 'ui-confirm',

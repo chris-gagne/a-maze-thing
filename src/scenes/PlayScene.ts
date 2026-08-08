@@ -25,6 +25,15 @@ import {
   type DifficultyId,
 } from '../game/difficultySettings'
 import { calculateStageCoinAward } from '../game/stageScoring'
+import {
+  DEFAULT_INITIALS,
+  LEADERBOARD_DIFFICULTIES,
+  beatsLocalRecord,
+  isLeaderboardDifficulty,
+  type LeaderboardCandidate,
+  type LeaderboardDifficulty,
+} from '../game/leaderboard'
+import { getLeaderboardRepository } from '../game/leaderboardRuntime'
 import { ENTITY_MOVEMENT_SPEEDS } from '../game/gamePacing'
 import { getSpikePhase, SpikePhase } from '../game/spikeTiming'
 import { getShutterPhase, ShutterPhase } from '../game/shutterTiming'
@@ -101,11 +110,23 @@ export class PlayScene extends Phaser.Scene {
   private ambushOverlay: Phaser.GameObjects.Container | null = null
   private wandererOverlay: Phaser.GameObjects.Container | null = null
   private pauseMenu: Phaser.GameObjects.Container | null = null
+  private initialsOverlay: Phaser.GameObjects.Container | null = null
+  private leaderboardOverlay: Phaser.GameObjects.Container | null = null
+  private runActions: Phaser.GameObjects.Container | null = null
+  private leaderboardCandidate: LeaderboardCandidate | null = null
+  private leaderboardRank: number | null = null
+  private leaderboardRecordBeaten = false
+  private initials = DEFAULT_INITIALS.split('')
+  private initialsSlot = 0
+  private leaderboardDifficulty: LeaderboardDifficulty = DEFAULT_DIFFICULTY
+  private leaderboardSelection = 0
+  private leaderboardClearPending = false
   private observedPortalReturnArmed = false
   private maze!: Maze
   private simulation!: StageSimulation
   private stageAudioObserver: StageAudioObserver | null = null
   private readonly audio = getReactiveAudio()
+  private readonly leaderboard = getLeaderboardRepository()
   private mazeOrigin = { x: 0, y: MAZE_TOP }
   private hunterSprite: Phaser.GameObjects.Image | null = null
   private ambusherSprite: Phaser.GameObjects.Image | null = null
@@ -122,6 +143,8 @@ export class PlayScene extends Phaser.Scene {
   private introductionSpaceKey!: Phaser.Input.Keyboard.Key
   private retryLevelKey!: Phaser.Input.Keyboard.Key
   private retrySeedKey!: Phaser.Input.Keyboard.Key
+  private leaderboardKey!: Phaser.Input.Keyboard.Key
+  private clearLeaderboardKey!: Phaser.Input.Keyboard.Key
   private coinSprites = new Map<number, Phaser.GameObjects.Image>()
   private spikeSprites = new Map<number, Phaser.GameObjects.Image>()
   private shutterSprites: Phaser.GameObjects.Image[] = []
@@ -169,6 +192,17 @@ export class PlayScene extends Phaser.Scene {
     this.ambushOverlay = null
     this.wandererOverlay = null
     this.pauseMenu = null
+    this.initialsOverlay = null
+    this.leaderboardOverlay = null
+    this.runActions = null
+    this.leaderboardCandidate = null
+    this.leaderboardRank = null
+    this.leaderboardRecordBeaten = false
+    this.initials = (this.leaderboard?.getState().lastInitials ?? DEFAULT_INITIALS).split('')
+    this.initialsSlot = 0
+    this.leaderboardDifficulty = DEFAULT_DIFFICULTY
+    this.leaderboardSelection = 0
+    this.leaderboardClearPending = false
     this.difficultyMenu = null
     this.stageAudioObserver = null
     this.observedPortalReturnArmed = false
@@ -326,6 +360,16 @@ export class PlayScene extends Phaser.Scene {
   }
 
   update(_time: number, deltaMilliseconds: number): void {
+    if (this.initialsOverlay !== null) {
+      this.updateInitialsInput()
+      return
+    }
+
+    if (this.leaderboardOverlay !== null) {
+      this.updateLeaderboardInput()
+      return
+    }
+
     if (this.difficultyMenu !== null) {
       this.updateDifficultySelectorInput()
       return
@@ -343,7 +387,9 @@ export class PlayScene extends Phaser.Scene {
     }
 
     if (this.runEndActive) {
-      if (Phaser.Input.Keyboard.JustDown(this.introductionEnterKey)) {
+      if (Phaser.Input.Keyboard.JustDown(this.leaderboardKey)) {
+        this.showLeaderboard()
+      } else if (Phaser.Input.Keyboard.JustDown(this.introductionEnterKey)) {
         this.startNewRun()
       } else if (Phaser.Input.Keyboard.JustDown(this.retrySeedKey)) {
         this.retryCurrentSeed()
@@ -738,17 +784,46 @@ export class PlayScene extends Phaser.Scene {
     this.introductionSpaceKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE)
     this.retryLevelKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.T)
     this.retrySeedKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.R)
-    window.addEventListener('keydown', this.handleWindowKeyDown)
+    this.leaderboardKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.L)
+    this.clearLeaderboardKey = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.C)
+    window.addEventListener('keydown', this.handleWindowKeyDown, { capture: true })
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
-      window.removeEventListener('keydown', this.handleWindowKeyDown)
+      window.removeEventListener('keydown', this.handleWindowKeyDown, { capture: true })
       this.audio?.setMood(AudioMood.Silent)
     })
   }
 
   private readonly handleWindowKeyDown = (event: KeyboardEvent): void => {
-    if (event.key !== 'Escape' || event.repeat) {
+    if (event.repeat) {
       return
     }
+
+    if (this.initialsOverlay !== null) {
+      if (/^[a-z]$/i.test(event.key)) {
+        event.preventDefault()
+        this.setInitialLetter(event.key.toUpperCase())
+      } else if (event.key === 'Backspace') {
+        event.preventDefault()
+        this.moveInitialsSlot(-1)
+      } else if (event.key === 'Escape') {
+        event.preventDefault()
+      }
+      return
+    }
+
+    if (this.leaderboardOverlay !== null && event.key === 'Escape') {
+      event.preventDefault()
+      this.closeLeaderboard()
+      return
+    }
+
+    if (event.key.toLowerCase() === 'l' && (this.difficultyMenu !== null || this.runEndActive)) {
+      event.preventDefault()
+      this.showLeaderboard()
+      return
+    }
+
+    if (event.key !== 'Escape') return
 
     event.preventDefault()
     this.handleEscapeKey()
@@ -782,7 +857,7 @@ export class PlayScene extends Phaser.Scene {
   private showDifficultySelector(): void {
     const scrim = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, 0x05080a, 0.94)
       .setOrigin(0)
-    const panel = this.add.rectangle(0, 0, 760, 650, 0x05080a, 0.99)
+    const panel = this.add.rectangle(0, 0, 760, 680, 0x05080a, 0.99)
     panel.setStrokeStyle(4, 0x42e8df, 1)
     const eyebrow = this.add.text(0, -278, 'RUN CONFIGURATION // NEW SIGNAL', {
       fontFamily: '"Press Start 2P"',
@@ -831,12 +906,15 @@ export class PlayScene extends Phaser.Scene {
       this.difficultyMenu?.add([background, label, description])
     })
 
-    const prompt = this.add.text(0, 270, 'UP / DOWN TO SELECT  //  ENTER TO START', {
+    const prompt = this.add.text(0, 240, 'UP / DOWN TO SELECT  //  ENTER TO START', {
       fontFamily: '"Press Start 2P"',
       fontSize: '11px',
       color: '#79f25f',
     }).setOrigin(0.5)
     this.difficultyMenu.add(prompt)
+    this.createOverlayButton(this.difficultyMenu, 0, 296, 260, 'LOCAL SCORES [L]', 0xffcf52, () => {
+      this.showLeaderboard()
+    })
     this.refreshDifficultySelection()
   }
 
@@ -1493,7 +1571,7 @@ export class PlayScene extends Phaser.Scene {
     }
     this.playerSprite.setTint(0xff5364)
 
-    const panel = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 680, 390, 0x05080a, 0.97)
+    const panel = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 720, 440, 0x05080a, 0.97)
     panel.setStrokeStyle(4, 0xff5364, 1)
     panel.setDepth(20).setScrollFactor(0)
 
@@ -1518,46 +1596,359 @@ export class PlayScene extends Phaser.Scene {
       },
     ).setOrigin(0.5).setDepth(21).setScrollFactor(0)
 
+    if (this.leaderboard !== null && isLeaderboardDifficulty(this.difficulty)) {
+      this.leaderboardCandidate = {
+        difficulty: this.difficulty,
+        score: totalScore,
+        stageReached: this.stageNumber,
+        runSeed: this.runSeed,
+        recordedAt: Date.now(),
+      }
+      const candidateRank = this.leaderboard.getCandidateRank(this.leaderboardCandidate)
+      this.leaderboardRecordBeaten = beatsLocalRecord(
+        this.leaderboard.getState(),
+        this.leaderboardCandidate,
+      )
+      if (candidateRank !== null) {
+        this.leaderboardRank = candidateRank
+        this.showInitialsEntry()
+        return
+      }
+    }
+    this.showRunActions()
+  }
+
+  private showRunActions(): void {
+    if (this.runActions !== null) return
+    const status = this.leaderboardCandidate?.score === 0
+      ? 'NO SCORE RECORDED'
+      : this.leaderboardRank === null
+      ? 'OUTSIDE LOCAL TOP 10'
+      : this.leaderboardRecordBeaten
+      ? `TAG ${this.initials.join('')}  //  LOCAL RECORD #01`
+      : `TAG ${this.initials.join('')}  //  LOCAL RANK #${String(this.leaderboardRank).padStart(2, '0')}`
+    this.runActions = this.add.container(0, 0).setDepth(21).setScrollFactor(0)
     this.createRunActionButton(
-      GAME_WIDTH / 2 - 138,
-      GAME_HEIGHT / 2 + 74,
+      this.runActions,
+      GAME_WIDTH / 2 - 220,
+      GAME_HEIGHT / 2 + 82,
       'NEW RUN [ENTER]',
       0x79f25f,
       () => this.startNewRun(),
     )
     this.createRunActionButton(
-      GAME_WIDTH / 2 + 138,
-      GAME_HEIGHT / 2 + 74,
+      this.runActions,
+      GAME_WIDTH / 2,
+      GAME_HEIGHT / 2 + 82,
+      'LOCAL SCORES [L]',
+      0xffcf52,
+      () => this.showLeaderboard(),
+    )
+    this.createRunActionButton(
+      this.runActions,
+      GAME_WIDTH / 2 + 220,
+      GAME_HEIGHT / 2 + 82,
       'RETRY SEED [R]',
       0x42e8df,
       () => this.retryCurrentSeed(),
     )
-    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 146, 'SCORES ARE NOT SAVED YET', {
+    this.runActions.add(this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 158, status, {
       fontFamily: '"Press Start 2P"',
       fontSize: '11px',
-      color: '#8ba5aa',
-    }).setOrigin(0.5).setDepth(21).setScrollFactor(0)
+      color: this.leaderboardRank === null ? '#8ba5aa' : '#79f25f',
+    }).setOrigin(0.5))
+  }
+
+  private showInitialsEntry(): void {
+    if (this.initialsOverlay !== null) return
+    this.initials = (this.leaderboard?.getState().lastInitials ?? DEFAULT_INITIALS).split('')
+    this.initialsSlot = 0
+    if (this.leaderboardRecordBeaten) {
+      this.audio?.play({ name: AudioCueName.LocalRecord })
+      this.cameras.main.flash(280, 121, 242, 95, false)
+    }
+    this.renderInitialsEntry()
+  }
+
+  private renderInitialsEntry(): void {
+    this.initialsOverlay?.destroy(true)
+    const accent = this.leaderboardRecordBeaten ? 0x79f25f : 0xffcf52
+    const accentCss = this.leaderboardRecordBeaten ? '#79f25f' : '#ffcf52'
+    const panel = this.add.rectangle(0, 0, 560, 370, 0x05080a, 1).setStrokeStyle(4, accent, 1)
+    const headline = this.add.text(0, -140, this.leaderboardRecordBeaten ? 'NEW LOCAL RECORD!' : 'NEW LOCAL SCORE', {
+      fontFamily: '"Press Start 2P"', fontSize: '22px', color: accentCss,
+    }).setOrigin(0.5)
+    const prompt = this.add.text(0, -90, this.leaderboardRecordBeaten
+      ? 'YOU TOPPED THE BOARD // ENTER YOUR TAG'
+      : 'ENTER YOUR TAG', {
+      fontFamily: '"Press Start 2P"', fontSize: '11px', color: '#8ba5aa',
+    }).setOrigin(0.5)
+    this.initialsOverlay = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2, [panel, headline, prompt])
+      .setDepth(80).setScrollFactor(0)
+
+    this.initials.forEach((letter, index) => {
+      const x = (index - 1) * 100
+      const selectorY = 12
+      const selected = index === this.initialsSlot
+      const slot = this.add.rectangle(x, selectorY, 74, 88, selected ? accent : 0x071318, selected ? 0.18 : 1)
+        .setStrokeStyle(selected ? 4 : 2, selected ? accent : 0x28545c, 1)
+        .setInteractive({ useHandCursor: true })
+      const text = this.add.text(x, selectorY, letter, {
+        fontFamily: '"Press Start 2P"', fontSize: '38px', color: '#f3fffe',
+      }).setOrigin(0.5)
+      const up = this.add.text(x, selectorY - 62, '+', {
+        fontFamily: '"Press Start 2P"', fontSize: '18px', color: '#42e8df',
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+      const down = this.add.text(x, selectorY + 62, '-', {
+        fontFamily: '"Press Start 2P"', fontSize: '18px', color: '#42e8df',
+      }).setOrigin(0.5).setInteractive({ useHandCursor: true })
+      slot.on('pointerdown', () => { this.initialsSlot = index; this.renderInitialsEntry() })
+      up.on('pointerdown', () => { this.initialsSlot = index; this.cycleInitialLetter(1) })
+      down.on('pointerdown', () => { this.initialsSlot = index; this.cycleInitialLetter(-1) })
+      this.initialsOverlay?.add([slot, text, up, down])
+    })
+    this.createOverlayButton(this.initialsOverlay, 0, 140, 220, 'CONFIRM', 0x79f25f, () => this.confirmInitials())
+  }
+
+  private updateInitialsInput(): void {
+    if (Phaser.Input.Keyboard.JustDown(this.cursors.left)) this.moveInitialsSlot(-1)
+    else if (Phaser.Input.Keyboard.JustDown(this.cursors.right)) this.moveInitialsSlot(1)
+    else if (Phaser.Input.Keyboard.JustDown(this.cursors.up)) this.cycleInitialLetter(1)
+    else if (Phaser.Input.Keyboard.JustDown(this.cursors.down)) this.cycleInitialLetter(-1)
+    else if (
+      Phaser.Input.Keyboard.JustDown(this.introductionEnterKey)
+      || Phaser.Input.Keyboard.JustDown(this.introductionSpaceKey)
+    ) this.confirmInitials()
+  }
+
+  private setInitialLetter(letter: string): void {
+    this.initials[this.initialsSlot] = letter
+    this.initialsSlot = Math.min(2, this.initialsSlot + 1)
+    this.audio?.play({ name: AudioCueName.UiMove })
+    this.renderInitialsEntry()
+  }
+
+  private moveInitialsSlot(offset: number): void {
+    this.initialsSlot = (this.initialsSlot + offset + 3) % 3
+    this.audio?.play({ name: AudioCueName.UiMove })
+    this.renderInitialsEntry()
+  }
+
+  private cycleInitialLetter(offset: number): void {
+    const code = this.initials[this.initialsSlot].charCodeAt(0) - 65
+    this.initials[this.initialsSlot] = String.fromCharCode(65 + (code + offset + 26) % 26)
+    this.audio?.play({ name: AudioCueName.UiMove })
+    this.renderInitialsEntry()
+  }
+
+  private confirmInitials(): void {
+    if (this.leaderboard === null || this.leaderboardCandidate === null) return
+    const result = this.leaderboard.record(this.leaderboardCandidate, this.initials.join(''))
+    this.leaderboardRank = result.rank
+    this.initialsOverlay?.destroy(true)
+    this.initialsOverlay = null
+    this.audio?.play({ name: AudioCueName.UiConfirm })
+    this.showRunActions()
+  }
+
+  private showLeaderboard(): void {
+    if (this.leaderboard === null || this.initialsOverlay !== null || this.leaderboardOverlay !== null) return
+    const selected = this.difficultyMenu === null
+      ? this.difficulty
+      : DIFFICULTY_PRESETS[this.selectedDifficultyIndex].id
+    this.leaderboardDifficulty = isLeaderboardDifficulty(selected) ? selected : DEFAULT_DIFFICULTY
+    this.leaderboardSelection = 0
+    this.leaderboardClearPending = false
+    this.audio?.play({ name: AudioCueName.UiConfirm })
+    this.renderLeaderboard()
+  }
+
+  private renderLeaderboard(): void {
+    if (this.leaderboard === null) return
+    this.leaderboardOverlay?.destroy(true)
+    const panel = this.add.rectangle(0, 0, 860, 660, 0x05080a, 1).setStrokeStyle(4, 0x42e8df, 1)
+    const title = this.add.text(0, -294, 'LOCAL SCORES', {
+      fontFamily: '"Press Start 2P"', fontSize: '24px', color: '#ffcf52',
+    }).setOrigin(0.5)
+    this.leaderboardOverlay = this.add.container(GAME_WIDTH / 2, GAME_HEIGHT / 2, [panel, title])
+      .setDepth(90).setScrollFactor(0)
+
+    LEADERBOARD_DIFFICULTIES.forEach((difficulty, index) => {
+      const x = (index - 1) * 250
+      const active = difficulty === this.leaderboardDifficulty
+      const preset = getDifficultyPreset(difficulty)
+      const tab = this.add.rectangle(x, -242, 224, 48, active ? DIFFICULTY_COLORS[difficulty] : 0x071318, active ? 0.2 : 1)
+        .setStrokeStyle(active ? 4 : 2, DIFFICULTY_COLORS[difficulty], 1)
+        .setInteractive({ useHandCursor: true })
+      const label = this.add.text(x, -242, preset.label, {
+        fontFamily: '"Press Start 2P"', fontSize: '10px', color: '#f3fffe',
+      }).setOrigin(0.5)
+      tab.on('pointerdown', () => this.selectLeaderboardDifficulty(index))
+      this.leaderboardOverlay?.add([tab, label])
+    })
+
+    const headerStyle = { fontFamily: '"Press Start 2P"', fontSize: '9px', color: '#8ba5aa' }
+    this.leaderboardOverlay.add([
+      this.add.text(-370, -196, 'RANK', headerStyle),
+      this.add.text(-268, -196, 'TAG', headerStyle),
+      this.add.text(-148, -196, 'COINS', headerStyle),
+      this.add.text(18, -196, 'STAGE', headerStyle),
+      this.add.text(170, -196, 'SEED', headerStyle),
+    ])
+    const entries = this.leaderboard.getBoard(this.leaderboardDifficulty)
+    this.leaderboardSelection = Math.max(0, Math.min(this.leaderboardSelection, entries.length - 1))
+    if (entries.length === 0) {
+      this.leaderboardOverlay.add(this.add.text(0, -20, 'NO SIGNALS RECORDED', {
+        fontFamily: '"Press Start 2P"', fontSize: '13px', color: '#8ba5aa',
+      }).setOrigin(0.5))
+    }
+    entries.forEach((entry, index) => {
+      const y = -158 + index * 36
+      const selected = index === this.leaderboardSelection
+      const row = this.add.rectangle(0, y, 760, 32, selected ? 0x42e8df : 0x071318, selected ? 0.14 : 0.72)
+        .setStrokeStyle(selected ? 2 : 1, selected ? 0x42e8df : 0x17333a, 1)
+        .setInteractive({ useHandCursor: true })
+      const rowStyle = { fontFamily: '"Press Start 2P"', fontSize: '10px', color: '#f3fffe' }
+      const seed = entry.runSeed.toString(16).toUpperCase().padStart(8, '0')
+      row.on('pointerover', () => {
+        if (this.leaderboardSelection !== index) {
+          this.leaderboardSelection = index
+          this.renderLeaderboard()
+        }
+      })
+      row.on('pointerdown', () => this.replayLeaderboardSelection())
+      this.leaderboardOverlay?.add([
+        row,
+        this.add.text(-352, y, String(index + 1).padStart(2, '0'), rowStyle).setOrigin(0, 0.5),
+        this.add.text(-250, y, entry.initials, rowStyle).setOrigin(0, 0.5),
+        this.add.text(-130, y, String(entry.score).padStart(5, '0'), rowStyle).setOrigin(0, 0.5),
+        this.add.text(38, y, String(entry.stageReached).padStart(3, '0'), rowStyle).setOrigin(0, 0.5),
+        this.add.text(170, y, seed, rowStyle).setOrigin(0, 0.5),
+      ])
+    })
+
+    const clearLabel = this.leaderboardClearPending ? 'CONFIRM CLEAR [C]?' : 'CLEAR BOARD [C]'
+    this.createOverlayButton(this.leaderboardOverlay, -250, 278, 220, 'BACK [ESC]', 0x42e8df, () => this.closeLeaderboard())
+    this.createOverlayButton(this.leaderboardOverlay, 0, 278, 220, clearLabel, 0xff5364, () => this.requestClearLeaderboard())
+    this.createOverlayButton(
+      this.leaderboardOverlay,
+      250,
+      278,
+      220,
+      entries.length === 0 ? 'NO SEED' : 'REPLAY SEED [R]',
+      entries.length === 0 ? 0x28545c : 0x79f25f,
+      () => this.replayLeaderboardSelection(),
+    )
+  }
+
+  private updateLeaderboardInput(): void {
+    if (Phaser.Input.Keyboard.JustDown(this.cursors.left)) this.moveLeaderboardDifficulty(-1)
+    else if (Phaser.Input.Keyboard.JustDown(this.cursors.right)) this.moveLeaderboardDifficulty(1)
+    else if (Phaser.Input.Keyboard.JustDown(this.cursors.up)) this.moveLeaderboardSelection(-1)
+    else if (Phaser.Input.Keyboard.JustDown(this.cursors.down)) this.moveLeaderboardSelection(1)
+    else if (Phaser.Input.Keyboard.JustDown(this.clearLeaderboardKey)) this.requestClearLeaderboard()
+    else if (Phaser.Input.Keyboard.JustDown(this.retrySeedKey)) this.replayLeaderboardSelection()
+    else if (
+      Phaser.Input.Keyboard.JustDown(this.introductionEnterKey)
+      || Phaser.Input.Keyboard.JustDown(this.introductionSpaceKey)
+    ) this.replayLeaderboardSelection()
+  }
+
+  private selectLeaderboardDifficulty(index: number): void {
+    this.leaderboardDifficulty = LEADERBOARD_DIFFICULTIES[index]
+    this.leaderboardSelection = 0
+    this.leaderboardClearPending = false
+    this.audio?.play({ name: AudioCueName.UiMove })
+    this.renderLeaderboard()
+  }
+
+  private moveLeaderboardDifficulty(offset: number): void {
+    const current = LEADERBOARD_DIFFICULTIES.indexOf(this.leaderboardDifficulty)
+    this.selectLeaderboardDifficulty((current + offset + LEADERBOARD_DIFFICULTIES.length) % LEADERBOARD_DIFFICULTIES.length)
+  }
+
+  private moveLeaderboardSelection(offset: number): void {
+    const count = this.leaderboard?.getBoard(this.leaderboardDifficulty).length ?? 0
+    if (count === 0) return
+    this.leaderboardSelection = (this.leaderboardSelection + offset + count) % count
+    this.leaderboardClearPending = false
+    this.audio?.play({ name: AudioCueName.UiMove })
+    this.renderLeaderboard()
+  }
+
+  private replayLeaderboardSelection(): void {
+    const entry = this.leaderboard?.getBoard(this.leaderboardDifficulty)[this.leaderboardSelection]
+    if (entry === undefined || this.runRestarting) return
+    this.runRestarting = true
+    this.audio?.play({ name: AudioCueName.UiConfirm })
+    updateRunConfigurationInUrl(entry.runSeed, entry.difficulty)
+    this.difficulty = entry.difficulty
+    this.restartRun(entry.runSeed)
+  }
+
+  private requestClearLeaderboard(): void {
+    if (this.leaderboard === null) return
+    if (!this.leaderboardClearPending) {
+      this.leaderboardClearPending = true
+      this.audio?.play({ name: AudioCueName.UiMove })
+      this.renderLeaderboard()
+      return
+    }
+    this.leaderboard.clear(this.leaderboardDifficulty)
+    this.leaderboardSelection = 0
+    this.leaderboardClearPending = false
+    this.audio?.play({ name: AudioCueName.UiConfirm })
+    this.renderLeaderboard()
+  }
+
+  private closeLeaderboard(): void {
+    this.leaderboardOverlay?.destroy(true)
+    this.leaderboardOverlay = null
+    this.leaderboardClearPending = false
+    this.audio?.play({ name: AudioCueName.UiConfirm })
   }
 
   private createRunActionButton(
+    container: Phaser.GameObjects.Container,
     x: number,
     y: number,
     label: string,
     color: number,
     activate: () => void,
   ): void {
-    const background = this.add.rectangle(x, y, 244, 58, 0x071318, 1)
-    background.setStrokeStyle(3, color, 1).setDepth(21).setScrollFactor(0)
+    const background = this.add.rectangle(x, y, 196, 58, 0x071318, 1)
+    background.setStrokeStyle(3, color, 1)
       .setInteractive({ useHandCursor: true })
-    this.add.text(x, y, label, {
+    const text = this.add.text(x, y, label, {
       fontFamily: '"Press Start 2P"',
-      fontSize: '12px',
+      fontSize: '10px',
       color: '#ffcf52',
-    }).setOrigin(0.5).setDepth(22).setScrollFactor(0)
+    }).setOrigin(0.5)
 
     background.on('pointerover', () => background.setFillStyle(color, 0.22))
     background.on('pointerout', () => background.setFillStyle(0x071318, 1))
     background.on('pointerdown', activate)
+    container.add([background, text])
+  }
+
+  private createOverlayButton(
+    container: Phaser.GameObjects.Container,
+    x: number,
+    y: number,
+    width: number,
+    label: string,
+    color: number,
+    activate: () => void,
+  ): void {
+    const background = this.add.rectangle(x, y, width, 46, 0x071318, 1)
+      .setStrokeStyle(2, color, 1).setInteractive({ useHandCursor: true })
+    const text = this.add.text(x, y, label, {
+      fontFamily: '"Press Start 2P"', fontSize: '10px', color: '#f3fffe',
+    }).setOrigin(0.5)
+    background.on('pointerover', () => background.setFillStyle(color, 0.2))
+    background.on('pointerout', () => background.setFillStyle(0x071318, 1))
+    background.on('pointerdown', activate)
+    container.add([background, text])
   }
 
   private startNewRun(): void {

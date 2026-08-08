@@ -23,6 +23,11 @@ Create a production build with `npm run build` and run the deterministic test su
 - `Enter`, `Space`, click, or tap: dismiss a stage briefing
 - On game over, `Enter`: start a new run with a fresh seed
 - On game over, `R`: retry the same seed from Stage 1
+- On the difficulty selector or game over, `L` or `LOCAL SCORES`: open the leaderboards
+- During initials entry, type three letters; use Left / Right to select and Up / Down to change a slot; `Enter` confirms
+- On the leaderboards, Left / Right changes difficulty, Up / Down selects a score, and `Enter` or `Space` replays its seed
+- On the leaderboards, `R` or `REPLAY SEED` restarts the selected run; `C` or `CLEAR BOARD` requires a second confirmation
+- On the leaderboards, `Escape` or `BACK` returns to the previous menu
 - `M` or the masthead speaker button: mute or unmute audio
 
 Movement continues until blocked. The hunter remains dormant until the player starts moving, then follows from the entrance after a short delay.
@@ -40,7 +45,7 @@ Entity movement uses a deliberately measured baseline: all runners and pursuers 
 
 Escape opens a pause menu during active gameplay. While paused, simulation time, movement, hazards, and gameplay animations freeze. `RETURN TO GAME` preserves the exact stage state. `RETRY LEVEL` rebuilds the current level with the same layout, score carried from earlier levels, and lives held when the level began; progress and life changes from the discarded attempt are reset, and dismissed feature briefings do not repeat. `RETRY SEED` starts a clean Stage 1 run with the same seed and difficulty, while `NEW RUN` opens the difficulty selector for a fresh seed. Both run-level actions reset score, lives, stage progress, and feature discoveries. Pause is unavailable during briefings, life-loss interruptions, stage transitions, and game over.
 
-Coins are optional, but collecting every coin before reaching the exit earns the `COIN MONGER!` bonus and doubles that stage's coin award. The multiplier applies only when the stage is completed, never doubles score carried from earlier stages, and remains available after losing a reserve life because collected coins stay collected. A game over before the exit receives no bonus. Score saving remains deferred.
+Coins are optional, but collecting every coin before reaching the exit earns the `COIN MONGER!` bonus and doubles that stage's coin award. The multiplier applies only when the stage is completed, never doubles score carried from earlier stages, and remains available after losing a reserve life because collected coins stay collected. A game over before the exit receives no bonus.
 
 A fresh run opens with a short maze briefing. Later stages pause for one combined introduction only when their generated layout contains something not yet seen in that run, such as spikes or the evasive Extra Life. The maze simulation and hazard timers remain frozen until the briefing is dismissed; game over resets these discoveries for the next run.
 
@@ -56,7 +61,9 @@ Extra-life targets move more slowly than the hunter but prefer routes that incre
 
 Each run starts with one life and can hold at most two. The evasive Extra Life is guaranteed on Stage 2 while one life remains; later replacement opportunities are scarce and random. Catching it grants the single reserve life. Losing that reserve resets the player and hunter, clears the Start return link, and pauses for 1.25 seconds with a cause-specific message. The Wanderer remains exactly where it was, including whether it was wandering or pursuing. Collected coins, caught targets, and the current hazard clock are preserved.
 
-Losing the final life opens a persistent run summary with the highest stage reached and total coins recovered. `NEW RUN` generates a pending fresh seed and opens the difficulty selector; the URL updates when a mode is confirmed. `RETRY SEED` restarts Stage 1 with the same generated stage sequence and difficulty. Both reset lives, score, and feature discoveries. Scores are carried only during the active run; saving, history, and leaderboards are deferred.
+Losing the final life opens a persistent run summary with the highest stage reached and total coins recovered. `NEW RUN` generates a pending fresh seed and opens the difficulty selector; the URL updates when a mode is confirmed. `RETRY SEED` restarts Stage 1 with the same generated stage sequence and difficulty. Both reset lives, score, and feature discoveries.
+
+Easy Peasy, Normal, and Overclocked each keep a separate browser-local top ten. Runs rank by total coins, then highest stage, then earliest achievement; zero-point games are not recorded. A qualifying game over asks for a three-letter `A-Z` tag before saving; beating an existing first place receives a distinct local-record celebration. The last confirmed tag is remembered and prefilled. Duplicate attempts are retained, including repeated runs on the same seed. Each row records tag, coins, stage, and seed, and can restart that deterministic seed from Stage 1 at its recorded difficulty. Clearing affects only the visible board and requires confirmation. Corrupt or unavailable browser storage never blocks play; scores remain usable for the current page when persistence fails. Casual Mode is excluded because it has no score or natural game over. Leaderboards are local to this browser and do not sync between devices.
 
 Some distant dead ends contain reusable portals. Entering one returns the player to the maze entrance while the hunter, collected coins, hazards, and other stage state continue unchanged. After leaving the entrance, a pulsing amber portal dot appears inside the red Start box; returning to Start then sends the player back to the last portal used. A newer portal replaces that return destination, and losing a life clears both the link and dot. Portals affect the player only.
 
@@ -107,7 +114,7 @@ Maze debug mode defaults to Easy Peasy timing and skips the difficulty selector.
 ## Architecture
 
 - `src/generation/`: seeded randomness, perfect-maze foundations, controlled escape loops, final endpoints, dead-end portals, coin placement, and fair spike placement
-- `src/game/`: framework-independent movement, scoring, blocker-aware enemy navigation, hunter pursuit, timed hazards, collision, and seed parsing
+- `src/game/`: framework-independent movement, scoring, local leaderboard ranking/persistence, blocker-aware enemy navigation, hunter pursuit, timed hazards, collision, and seed parsing
 - `src/audio/`: pure simulation observers, persistent settings, and the application-scoped procedural Web Audio engine
 - `src/scenes/`: Phaser input and rendering adapter
 - `src/presentation/`: generated original pixel textures
@@ -116,6 +123,4 @@ The deterministic game modules do not depend on Phaser. Rendering runs at the br
 
 ## Current slice
 
-Implemented: four run difficulties, maze-only Casual Mode, scalable gameplay timing, five-band maze growth through Stage 50, increasingly braided route profiles, scrolling late-stage worlds, deterministic post-cap variations, reusable dead-end escape portals, loop-biased coin clusters, continuous buffered movement, optional coins, stage progression, run-scoped feature briefings, one delayed hunter with stable route choices, hidden Stage 11+ Ambushers with a 25-coin survival challenge, seeded Stage 21+ Wanderers with evasion rewards, scarce evasive extra-life targets, telegraphed timed floor spikes, route-changing Stage 6+ Maze Shutters, retained-life respawns, reactive procedural audio, a responsive sprite legend, pixel presentation, and reproducible/debug URLs.
-
-Next: local leaderboards.
+Implemented: four run difficulties, maze-only Casual Mode, scalable gameplay timing, five-band maze growth through Stage 50, increasingly braided route profiles, scrolling late-stage worlds, deterministic post-cap variations, reusable dead-end escape portals, loop-biased coin clusters, continuous buffered movement, optional coins, stage progression, run-scoped feature briefings, one delayed hunter with stable route choices, hidden Stage 11+ Ambushers with a 25-coin survival challenge, seeded Stage 21+ Wanderers with evasion rewards, scarce evasive extra-life targets, telegraphed timed floor spikes, route-changing Stage 6+ Maze Shutters, retained-life respawns, reactive procedural audio, tagged local leaderboards with deterministic seed replay, a responsive sprite legend, pixel presentation, and reproducible/debug URLs.

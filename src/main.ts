@@ -5,6 +5,8 @@ import './style.css'
 import { ProceduralAudioEngine } from './audio/ProceduralAudioEngine'
 import { provideReactiveAudio } from './audio/audioRuntime'
 import { loadAudioSettings, saveAudioSettings, type StorageAdapter } from './audio/audioSettings'
+import { LeaderboardRepository } from './game/leaderboardPersistence'
+import { provideLeaderboardRepository } from './game/leaderboardRuntime'
 import { initializeSpriteLegend } from './presentation/spriteLegend'
 import { GAME_HEIGHT, GAME_WIDTH, PlayScene } from './scenes/PlayScene'
 
@@ -61,6 +63,7 @@ document.querySelector<HTMLDivElement>('#app')!.innerHTML = `
 const storage = getStorage()
 const audio = new ProceduralAudioEngine(loadAudioSettings(storage).muted)
 provideReactiveAudio(audio)
+provideLeaderboardRepository(new LeaderboardRepository(storage))
 const audioButton = document.querySelector<HTMLButtonElement>('.audio-toggle')!
 
 const updateAudioButton = (): void => {
@@ -83,7 +86,7 @@ const handleAudioButton = (): void => {
   toggleAudio()
 }
 const handleAudioKey = (event: KeyboardEvent): void => {
-  if (event.key.toLowerCase() !== 'm' || event.repeat) return
+  if (event.defaultPrevented || event.key.toLowerCase() !== 'm' || event.repeat) return
   event.preventDefault()
   toggleAudio()
 }
