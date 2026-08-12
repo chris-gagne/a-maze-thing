@@ -1,5 +1,19 @@
 import { describe, expect, it } from 'vitest'
-import { parseDebugStage, parseRunSeed } from './runSeed'
+import { deriveBonusStageSeed, parseDebugStage, parseRunSeed } from './runSeed'
+
+describe('deriveBonusStageSeed', () => {
+  it('is reproducible and differs across bonus rounds and runs', () => {
+    expect(deriveBonusStageSeed(4271, 10)).toBe(deriveBonusStageSeed(4271, 10))
+    expect(deriveBonusStageSeed(4271, 10)).not.toBe(deriveBonusStageSeed(4271, 20))
+    expect(deriveBonusStageSeed(4271, 10)).not.toBe(deriveBonusStageSeed(4272, 10))
+  })
+
+  it('rejects invalid run seeds and stage numbers', () => {
+    expect(() => deriveBonusStageSeed(-1, 10)).toThrow(RangeError)
+    expect(() => deriveBonusStageSeed(0x100000000, 10)).toThrow(RangeError)
+    expect(() => deriveBonusStageSeed(1, 0)).toThrow(RangeError)
+  })
+})
 
 describe('parseRunSeed', () => {
   it('accepts decimal and hexadecimal 32-bit seeds', () => {

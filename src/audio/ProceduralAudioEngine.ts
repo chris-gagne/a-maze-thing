@@ -178,6 +178,9 @@ function getCueMotif(name: AudioCue['name']): readonly ToneNote[] {
     case AudioCueName.ShutterClose: return [note(82, 0, 0.18, 0.24, 'square')]
     case AudioCueName.ShutterOpen: return [note(165, 0, 0.11, 0.13, 'triangle')]
     case AudioCueName.StageClear: return [note(392, 0, 0.1, 0.2), note(523, 0.1, 0.1, 0.2), note(659, 0.2, 0.24, 0.22)]
+    case AudioCueName.BonusTick: return [note(660, 0, 0.06, 0.18, 'square')]
+    case AudioCueName.BonusFinalTick: return [note(880, 0, 0.07, 0.24), note(660, 0.075, 0.055, 0.18)]
+    case AudioCueName.BonusComplete: return [note(784, 0, 0.1, 0.22), note(988, 0.1, 0.1, 0.23), note(1175, 0.2, 0.24, 0.24)]
     case AudioCueName.LocalRecord: return [note(523, 0, 0.1, 0.2), note(659, 0.08, 0.1, 0.21), note(784, 0.16, 0.12, 0.22), note(1047, 0.26, 0.3, 0.24)]
     case AudioCueName.GameOver: return [note(196, 0, 0.16, 0.24, 'triangle'), note(147, 0.14, 0.2, 0.22, 'triangle'), note(98, 0.32, 0.35, 0.22, 'triangle')]
     case AudioCueName.Pause: return [note(294, 0, 0.08, 0.14, 'triangle')]
@@ -195,6 +198,8 @@ function getPulseProfile(mood: AudioMoodValue): {
   level: number
 } {
   switch (mood) {
+    case AudioMood.Bonus:
+      return { notes: [123, 165, 147, 196], intervalMilliseconds: 240, duration: 0.065, level: 0.22 }
     case AudioMood.Danger:
       return { notes: [110, 147, 110, 165], intervalMilliseconds: 290, duration: 0.075, level: 0.28 }
     case AudioMood.Pursuit:

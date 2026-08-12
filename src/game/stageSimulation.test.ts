@@ -13,11 +13,14 @@ import {
   getAmbusherGridPosition,
   getHunterGridPosition,
   getLifeTargetGridPosition,
+  getLifeTargetGridPositions,
   getPlayerGridPosition,
   getWandererGridPosition,
   getSpikePhase,
   HUNTER_DIRECTION_PRIORITY,
+  LifeTargetEffect,
   queuePlayerDirection,
+  spawnLifeTargets,
   SpikePhase,
   updateStageSimulation,
 } from './stageSimulation'
@@ -578,6 +581,35 @@ describe('stage simulation', () => {
     expect(simulation.lives).toBe(MAX_LIVES)
     expect(simulation.livesGained).toBe(0)
     expect(simulation.lifeTarget?.collected).toBe(true)
+  })
+
+  it('captures multiple bonus targets without granting lives', () => {
+    const maze = createThreeCellLine()
+    const simulation = createStageSimulation(maze, {
+      lifeTargets: [
+        { startCellIndex: 1, effect: LifeTargetEffect.BonusMultiplier },
+      ],
+    })
+    spawnLifeTargets(simulation, [1], LifeTargetEffect.BonusMultiplier)
+
+    simulation.player.cellIndex = 1
+    updateStageSimulation(simulation, 0.1, { player: 0, lifeTarget: 0 })
+
+    expect(simulation.bonusTargetsCaptured).toBe(2)
+    expect(simulation.lives).toBe(INITIAL_LIVES)
+    expect(simulation.livesGained).toBe(0)
+    expect(getLifeTargetGridPositions(simulation).size).toBe(0)
+  })
+
+  it('can cross the exit without completing the stage', () => {
+    const maze = createThreeCellLine()
+    const simulation = createStageSimulation(maze, { exitCompletesStage: false })
+
+    queuePlayerDirection(simulation, Direction.East)
+    updateStageSimulation(simulation, 2, { player: 1 })
+
+    expect(simulation.player.cellIndex).toBe(2)
+    expect(simulation.complete).toBe(false)
   })
 
   it('moves the extra-life target down the route that increases player distance', () => {
