@@ -7,14 +7,25 @@ import {
   Direction,
   getAmbusherGridPosition,
   getHunterGridPosition,
-  getLifeTargetGridPosition,
+  getLifeTargetGridPositions,
   getPlayerGridPosition,
   getWandererGridPosition,
+  LifeTargetEffect,
   queuePlayerDirection,
   type StageSimulation,
   updateStageSimulation,
 } from '../game/stageSimulation'
-import { parseDebugStage, parseRunSeed } from '../game/runSeed'
+import { deriveBonusStageSeed, parseDebugStage, parseRunSeed } from '../game/runSeed'
+import {
+  BONUS_STAGE_DURATION_SECONDS,
+  BONUS_STAGE_GENERATION_STAGE,
+  BONUS_STAGE_PLAYER_SPEED_MULTIPLIER,
+  BONUS_STAGE_TOTAL_TARGETS,
+  calculateBonusStageAward,
+  getBonusCountdownPhase,
+  getBonusSignalGainPercent,
+  isBonusStage,
+} from '../game/bonusStage'
 import { INITIAL_LIVES } from '../game/lifeRules'
 import {
   DEFAULT_DIFFICULTY,
@@ -46,6 +57,7 @@ import {
 } from '../game/stageIntroductions'
 import { createCoinPlacement } from '../generation/coinPlacement'
 import { placeAmbusher } from '../generation/ambusherPlacement'
+import { placeBonusTargets } from '../generation/bonusTargetPlacement'
 import { placeLifeTarget } from '../generation/lifeTargetPlacement'
 import { generateMaze, type Maze, Wall } from '../generation/maze'
 import { placePortals } from '../generation/portalPlacement'
@@ -93,6 +105,9 @@ export class PlayScene extends Phaser.Scene {
   private stageNumber = 1
   private carriedScore = 0
   private runSeed = 0
+  private bonusStage = false
+  private bonusSecondsRemaining = BONUS_STAGE_DURATION_SECONDS
+  private lastBonusTickSecond = BONUS_STAGE_DURATION_SECONDS
   private lives = 1
   private stageEntryLives = 1
   private difficulty: DifficultyId = DEFAULT_DIFFICULTY
@@ -131,12 +146,13 @@ export class PlayScene extends Phaser.Scene {
   private hunterSprite: Phaser.GameObjects.Image | null = null
   private ambusherSprite: Phaser.GameObjects.Image | null = null
   private wandererSprite: Phaser.GameObjects.Image | null = null
-  private lifeTargetSprite: Phaser.GameObjects.Image | null = null
+  private lifeTargetSprites = new Map<number, Phaser.GameObjects.Image>()
   private playerSprite!: Phaser.GameObjects.Image
   private startMarker!: Phaser.GameObjects.Graphics
   private livesText!: Phaser.GameObjects.Text
   private scoreText!: Phaser.GameObjects.Text
   private remainingText!: Phaser.GameObjects.Text
+  private timerText: Phaser.GameObjects.Text | null = null
   private cursors!: Phaser.Types.Input.Keyboard.CursorKeys
   private movementKeys!: MovementKeys
   private introductionEnterKey!: Phaser.Input.Keyboard.Key
@@ -152,6 +168,7 @@ export class PlayScene extends Phaser.Scene {
   private ambusherBranchIndices: number[] = []
   private observedLivesLost = 0
   private observedLivesGained = 0
+  private observedBonusTargetsCaptured = 0
   private observedPortalUses = 0
   private observedAmbusherReveals = 0
   private observedWandererSpawns = 0
@@ -176,6 +193,9 @@ export class PlayScene extends Phaser.Scene {
     this.lives = data.lives ?? INITIAL_LIVES
     this.stageEntryLives = this.lives
     this.difficulty = resolveDifficulty(data.difficulty, requestedDifficulty, debugMode)
+    this.bonusStage = getDifficultyPreset(this.difficulty).fullGame && isBonusStage(this.stageNumber)
+    this.bonusSecondsRemaining = BONUS_STAGE_DURATION_SECONDS
+    this.lastBonusTickSecond = BONUS_STAGE_DURATION_SECONDS
     this.difficultySelectionRequired = data.selectDifficulty
       ?? (!debugMode && data.difficulty === undefined && (requestedSeed === null || requestedDifficulty === null))
     this.selectedDifficultyIndex = DIFFICULTY_PRESETS.findIndex((preset) => {
@@ -214,9 +234,11 @@ export class PlayScene extends Phaser.Scene {
     this.hunterSprite = null
     this.ambusherSprite = null
     this.wandererSprite = null
-    this.lifeTargetSprite = null
+    this.lifeTargetSprites.clear()
+    this.timerText = null
     this.observedLivesLost = 0
     this.observedLivesGained = 0
+    this.observedBonusTargetsCaptured = 0
     this.observedPortalUses = 0
     this.observedAmbusherReveals = 0
     this.observedWandererSpawns = 0
@@ -234,15 +256,19 @@ export class PlayScene extends Phaser.Scene {
       return
     }
 
-    const stageProfile = getStageProfile(this.stageNumber)
-    const stageSeed = deriveStageSeed(this.runSeed, this.stageNumber)
+    const generationStage = this.bonusStage ? BONUS_STAGE_GENERATION_STAGE : this.stageNumber
+    const stageProfile = getStageProfile(generationStage)
+    const stageSeed = this.bonusStage
+      ? deriveBonusStageSeed(this.runSeed, this.stageNumber)
+      : deriveStageSeed(this.runSeed, this.stageNumber)
     const fullGame = getDifficultyPreset(this.difficulty).fullGame
+    const threatsEnabled = fullGame && !this.bonusStage
     this.maze = generateMaze(stageProfile.width, stageProfile.height, stageSeed, {
       ...stageProfile.topology,
       endpointProfile: stageProfile.endpointProfile,
     })
     const portalIndices = fullGame ? placePortals(this.maze, stageSeed ^ 0xa4dfed5) : []
-    const lifeTargetIndex = fullGame
+    const lifeTargetIndex = fullGame && !this.bonusStage
       ? placeLifeTarget(
           this.maze,
           this.stageNumber,
@@ -254,7 +280,7 @@ export class PlayScene extends Phaser.Scene {
     const portalReservations = lifeTargetIndex === null
       ? portalIndices
       : [...portalIndices, lifeTargetIndex]
-    const ambusherPlacement = fullGame
+    const ambusherPlacement = threatsEnabled
       ? placeAmbusher(
           this.maze,
           this.stageNumber,
@@ -262,14 +288,14 @@ export class PlayScene extends Phaser.Scene {
           portalReservations,
         )
       : null
-    const wandererPlacement = fullGame
+    const wandererPlacement = threatsEnabled
       ? placeWanderer(this.stageNumber, stageSeed ^ 0x7a11de)
       : null
     this.ambusherBranchIndices = ambusherPlacement?.branchIndices ?? []
     const spikeReservations = ambusherPlacement === null
       ? portalReservations
       : [...portalReservations, ...ambusherPlacement.branchIndices]
-    const spikePlacement = fullGame
+    const spikePlacement = threatsEnabled
       ? placeSpikes(
           this.maze,
           this.stageNumber,
@@ -279,12 +305,21 @@ export class PlayScene extends Phaser.Scene {
         )
       : []
     const shutterPlacement = fullGame
-      ? placeShutters(this.maze, this.stageNumber, stageSeed ^ 0x5a477e)
+      ? placeShutters(this.maze, generationStage, stageSeed ^ 0x5a477e)
       : []
     const spikeIndices = new Set(spikePlacement.map((spike) => spike.cellIndex))
+    const bonusTargetIndices = this.bonusStage
+      ? placeBonusTargets(
+          this.maze,
+          BONUS_STAGE_TOTAL_TARGETS,
+          stageSeed ^ 0xb07a6e7,
+          portalIndices,
+        )
+      : []
     const occupiedIndices = new Set([
       ...portalReservations,
       ...spikeIndices,
+      ...bonusTargetIndices,
       ...(ambusherPlacement === null ? [] : [ambusherPlacement.cellIndex]),
     ])
     const coinPlacement = fullGame
@@ -295,7 +330,7 @@ export class PlayScene extends Phaser.Scene {
     const exitIndex = this.maze.exit.y * this.maze.width + this.maze.exit.x
     this.simulation = createStageSimulation(this.maze, {
       coinIndices: coinPlacement.indices,
-      hunter: fullGame
+      hunter: threatsEnabled
         ? {
             startCellIndex: entranceIndex,
             releaseDelaySeconds: HUNTER_RELEASE_DELAY_SECONDS,
@@ -313,10 +348,17 @@ export class PlayScene extends Phaser.Scene {
             routeSeed: wandererPlacement.routeSeed,
           },
       lifeTarget: lifeTargetIndex === null ? undefined : { startCellIndex: lifeTargetIndex },
+      lifeTargets: this.bonusStage
+        ? bonusTargetIndices.map((startCellIndex) => ({
+            startCellIndex,
+            effect: LifeTargetEffect.BonusMultiplier,
+          }))
+        : undefined,
       spikes: spikePlacement,
       shutters: shutterPlacement,
       portalIndices,
       lives: this.lives,
+      exitCompletesStage: !this.bonusStage,
     })
     this.stageAudioObserver = new StageAudioObserver(this.simulation)
     const mazeWidth = this.maze.width * CELL_SIZE
@@ -344,12 +386,21 @@ export class PlayScene extends Phaser.Scene {
       presentFeatureIds.push(StageFeature.Wanderer)
     }
 
-    const introduction = selectStageIntroduction(
-      this.stageNumber,
-      presentFeatureIds,
-      this.introducedFeatureIds,
-      !fullGame,
-    )
+    const introduction: StageIntroduction | null = this.bonusStage
+      ? {
+          headline: 'BONUS STAGE',
+          lines: [
+            'Grab coins for 60 seconds. Twenty Signal targets are loose throughout the maze.',
+            'No threats. No early exit. Move fast.',
+          ],
+          introducedFeatureIds: [...this.introducedFeatureIds],
+        }
+      : selectStageIntroduction(
+          this.stageNumber,
+          presentFeatureIds,
+          this.introducedFeatureIds,
+          !fullGame,
+        )
     if (introduction !== null) {
       this.introducedFeatureIds = new Set(introduction.introducedFeatureIds)
       this.showStageIntroduction(introduction)
@@ -426,8 +477,16 @@ export class PlayScene extends Phaser.Scene {
       updateStageSimulation(
         this.simulation,
         FIXED_STEP_SECONDS * getDifficultyPreset(this.difficulty).simulationSpeedMultiplier,
-        ENTITY_MOVEMENT_SPEEDS,
+        this.bonusStage
+          ? {
+              ...ENTITY_MOVEMENT_SPEEDS,
+              player: ENTITY_MOVEMENT_SPEEDS.player * BONUS_STAGE_PLAYER_SPEED_MULTIPLIER,
+            }
+          : ENTITY_MOVEMENT_SPEEDS,
       )
+      if (this.bonusStage) {
+        this.updateBonusTimer(FIXED_STEP_SECONDS)
+      }
       this.syncAudioEvents()
       this.accumulator -= FIXED_STEP_SECONDS
 
@@ -449,7 +508,9 @@ export class PlayScene extends Phaser.Scene {
     this.syncPortalEvents()
     this.syncStartReturnMarker()
 
-    if (this.simulation.complete) {
+    if (this.bonusStage && this.bonusSecondsRemaining <= 0) {
+      this.resolveBonusStage()
+    } else if (this.simulation.complete) {
       this.resolveStage()
     } else if (this.simulation.gameOver) {
       this.resolveRun()
@@ -538,7 +599,7 @@ export class PlayScene extends Phaser.Scene {
     this.strokeMazeWalls(walls, 10, 0x0c4b55, 0.55)
     this.strokeMazeWalls(walls, 4, 0x42e8df, 1)
 
-    if (isMazeDebugEnabled()) {
+    if (isMazeDebugOverlayEnabled()) {
       this.drawMazeDebug()
     }
 
@@ -628,16 +689,15 @@ export class PlayScene extends Phaser.Scene {
       ).setDepth(4).setVisible(false)
     }
 
-    const lifeTargetPosition = getLifeTargetGridPosition(this.simulation)
-    if (lifeTargetPosition !== null) {
-      this.lifeTargetSprite = this.add.image(
+    for (const [targetId, lifeTargetPosition] of getLifeTargetGridPositions(this.simulation)) {
+      const lifeTargetSprite = this.add.image(
         this.cellCenterX(lifeTargetPosition.x),
         this.cellCenterY(lifeTargetPosition.y),
         TextureKey.LifeTarget,
-      )
-      this.lifeTargetSprite.setDepth(4)
+      ).setDepth(4)
+      this.lifeTargetSprites.set(targetId, lifeTargetSprite)
       this.tweens.add({
-        targets: this.lifeTargetSprite,
+        targets: lifeTargetSprite,
         alpha: { from: 0.65, to: 1 },
         duration: 360,
         yoyo: true,
@@ -752,7 +812,12 @@ export class PlayScene extends Phaser.Scene {
       color: '#f3fffe',
     }
 
-    this.add.text(48, 32, `STAGE ${String(this.stageNumber).padStart(2, '0')}`, valueStyle)
+    this.add.text(
+      48,
+      32,
+      this.bonusStage ? 'BONUS STAGE' : `STAGE ${String(this.stageNumber).padStart(2, '0')}`,
+      valueStyle,
+    )
       .setScrollFactor(0).setDepth(11)
     this.add.text(48, 64, `SEED ${stageSeed.toString(16).toUpperCase().padStart(8, '0')}`, labelStyle)
       .setScrollFactor(0).setDepth(11)
@@ -763,6 +828,10 @@ export class PlayScene extends Phaser.Scene {
       .setOrigin(1, 0).setScrollFactor(0).setDepth(11)
     this.remainingText = this.add.text(GAME_WIDTH - 48, 64, '', labelStyle)
       .setOrigin(1, 0).setScrollFactor(0).setDepth(11)
+    if (this.bonusStage) {
+      this.timerText = this.add.text(GAME_WIDTH / 2, 64, '', valueStyle)
+        .setOrigin(0.5, 0).setScrollFactor(0).setDepth(11)
+    }
     this.updateHud()
   }
 
@@ -1168,15 +1237,33 @@ export class PlayScene extends Phaser.Scene {
       ).setAlpha(this.simulation.wanderer?.triggered ? 1 : 0.72)
     }
 
-    const lifeTargetPosition = getLifeTargetGridPosition(this.simulation)
-    if (lifeTargetPosition === null) {
-      this.lifeTargetSprite?.destroy()
-      this.lifeTargetSprite = null
-    } else {
-      this.lifeTargetSprite?.setPosition(
-        this.cellCenterX(lifeTargetPosition.x),
-        this.cellCenterY(lifeTargetPosition.y),
-      )
+    const lifeTargetPositions = getLifeTargetGridPositions(this.simulation)
+    for (const [targetId, sprite] of this.lifeTargetSprites) {
+      const position = lifeTargetPositions.get(targetId)
+      if (position === undefined) {
+        sprite.destroy()
+        this.lifeTargetSprites.delete(targetId)
+      } else {
+        sprite.setPosition(this.cellCenterX(position.x), this.cellCenterY(position.y))
+      }
+    }
+    for (const [targetId, position] of lifeTargetPositions) {
+      if (this.lifeTargetSprites.has(targetId)) continue
+      const sprite = this.add.image(
+        this.cellCenterX(position.x),
+        this.cellCenterY(position.y),
+        TextureKey.LifeTarget,
+      ).setDepth(4)
+      this.lifeTargetSprites.set(targetId, sprite)
+      this.tweens.add({
+        targets: sprite,
+        alpha: { from: 0.65, to: 1 },
+        duration: 360,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Stepped',
+        easeParams: [2],
+      })
     }
 
     const rotationByDirection: Partial<Record<Direction, number>> = {
@@ -1239,14 +1326,15 @@ export class PlayScene extends Phaser.Scene {
     for (const cue of update.cues) {
       this.audio.play(cue)
     }
-    this.audio.setMood(update.mood)
+    this.audio.setMood(this.bonusStage ? AudioMood.Bonus : update.mood)
   }
 
   private refreshAudioMood(): void {
     if (this.stageAudioObserver === null || this.audio === null) {
       return
     }
-    this.audio.setMood(this.stageAudioObserver.observe(this.simulation).mood)
+    const observedMood = this.stageAudioObserver.observe(this.simulation).mood
+    this.audio.setMood(this.bonusStage ? AudioMood.Bonus : observedMood)
   }
 
   private syncAmbusherEvents(): void {
@@ -1330,6 +1418,12 @@ export class PlayScene extends Phaser.Scene {
     if (this.simulation.livesGained > this.observedLivesGained) {
       this.observedLivesGained = this.simulation.livesGained
       this.showStatusMessage('EXTRA LIFE', '#79f25f')
+    }
+
+    if (this.simulation.bonusTargetsCaptured > this.observedBonusTargetsCaptured) {
+      this.observedBonusTargetsCaptured = this.simulation.bonusTargetsCaptured
+      this.audio?.play({ name: AudioCueName.ExtraLife })
+      this.showStatusMessage('SIGNAL GAIN +25%', '#ffcf52')
     }
 
     if (this.simulation.livesLost > this.observedLivesLost) {
@@ -1466,6 +1560,19 @@ export class PlayScene extends Phaser.Scene {
     }
 
     this.livesText.setText(`LIVES ${String(this.lives).padStart(2, '0')}`)
+    if (this.bonusStage) {
+      const displaySeconds = Math.ceil(this.bonusSecondsRemaining)
+      const minutes = Math.floor(displaySeconds / 60)
+      const seconds = String(displaySeconds % 60).padStart(2, '0')
+      this.scoreText.setText(`COINS ${String(this.simulation.collectedCoins).padStart(3, '0')}`)
+      this.remainingText.setText(
+        `SIGNAL GAIN ${getBonusSignalGainPercent(this.simulation.bonusTargetsCaptured)}%`,
+      )
+      this.timerText?.setText(`${String(minutes).padStart(2, '0')}:${seconds}`)
+      const phase = getBonusCountdownPhase(this.bonusSecondsRemaining)
+      this.timerText?.setColor(phase === 'danger' ? '#ff5364' : phase === 'warning' ? '#ffb629' : '#f3fffe')
+      return
+    }
     this.scoreText.setText(`COINS ${String(score).padStart(4, '0')}`)
     this.remainingText.setText(`${String(this.simulation.coins.size).padStart(3, '0')} IN MAZE`)
   }
@@ -1550,6 +1657,88 @@ export class PlayScene extends Phaser.Scene {
     }
 
     this.time.delayedCall(1250, () => {
+      this.scene.restart({
+        stageNumber: this.stageNumber + 1,
+        carriedScore: totalScore,
+        runSeed: this.runSeed,
+        lives: this.simulation.lives,
+        introducedFeatureIds: [...this.introducedFeatureIds],
+        difficulty: this.difficulty,
+      })
+    })
+  }
+
+  private updateBonusTimer(deltaSeconds: number): void {
+    const previousSeconds = this.bonusSecondsRemaining
+    this.bonusSecondsRemaining = Math.max(0, previousSeconds - deltaSeconds)
+    const displaySecond = Math.ceil(this.bonusSecondsRemaining)
+    if (displaySecond !== this.lastBonusTickSecond) {
+      this.lastBonusTickSecond = displaySecond
+      if (displaySecond >= 1 && displaySecond <= 15) {
+        const finalCountdown = displaySecond <= 5
+        this.audio?.play({
+          name: finalCountdown ? AudioCueName.BonusFinalTick : AudioCueName.BonusTick,
+        })
+        if (this.timerText !== null) {
+          this.tweens.killTweensOf(this.timerText)
+          this.timerText.setScale(1)
+          this.tweens.add({
+            targets: this.timerText,
+            scale: finalCountdown ? 1.32 : 1.08 + (15 - displaySecond) * 0.012,
+            duration: finalCountdown ? 110 : 160,
+            yoyo: true,
+            ease: 'Stepped',
+            easeParams: [2],
+          })
+        }
+      }
+    }
+  }
+
+  private resolveBonusStage(): void {
+    this.stageResolved = true
+    this.audio?.setMood(AudioMood.Silent)
+    this.audio?.play({ name: AudioCueName.BonusComplete })
+    const award = calculateBonusStageAward(
+      this.simulation.collectedCoins,
+      this.simulation.bonusTargetsCaptured,
+    )
+    const signalGainPercent = getBonusSignalGainPercent(award.capturedTargets)
+    const totalScore = this.carriedScore + award.awardedCoins
+    const panel = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 680, 300, 0x05080a, 0.97)
+    panel.setStrokeStyle(4, 0xffcf52, 1).setDepth(20).setScrollFactor(0)
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 96, 'BONUS COMPLETE', {
+      fontFamily: '"Press Start 2P"',
+      fontSize: '27px',
+      color: '#ffcf52',
+    }).setOrigin(0.5).setDepth(21).setScrollFactor(0)
+    this.add.text(
+      GAME_WIDTH / 2,
+      GAME_HEIGHT / 2 - 28,
+      `COINS  ${award.collectedCoins}`,
+      {
+        fontFamily: '"Press Start 2P"',
+        fontSize: '14px',
+        color: '#f3fffe',
+      },
+    ).setOrigin(0.5).setDepth(21).setScrollFactor(0)
+    this.add.text(
+      GAME_WIDTH / 2,
+      GAME_HEIGHT / 2 + 30,
+      `SIGNAL GAIN  ${signalGainPercent}%`,
+      {
+        fontFamily: '"Press Start 2P"',
+        fontSize: '17px',
+        color: '#79f25f',
+      },
+    ).setOrigin(0.5).setDepth(21).setScrollFactor(0)
+    this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 88, `TOTAL PAYOUT  ${award.awardedCoins}`, {
+      fontFamily: '"Press Start 2P"',
+      fontSize: '15px',
+      color: '#42e8df',
+    }).setOrigin(0.5).setDepth(21).setScrollFactor(0)
+
+    this.time.delayedCall(1600, () => {
       this.scene.restart({
         stageNumber: this.stageNumber + 1,
         carriedScore: totalScore,
@@ -2028,6 +2217,7 @@ function updateRunConfigurationInUrl(runSeed: number, difficulty: DifficultyId):
   history.replaceState(null, '', url)
 }
 
-function isMazeDebugEnabled(): boolean {
-  return new URLSearchParams(location.search).get('debug') === 'maze'
+function isMazeDebugOverlayEnabled(): boolean {
+  const searchParams = new URLSearchParams(location.search)
+  return searchParams.get('debug') === 'maze' && searchParams.get('routes') === '1'
 }

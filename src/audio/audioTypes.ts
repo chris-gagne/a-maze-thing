@@ -3,6 +3,7 @@ export const AudioMood = {
   Calm: 'calm',
   Pursuit: 'pursuit',
   Danger: 'danger',
+  Bonus: 'bonus',
 } as const
 
 export type AudioMood = typeof AudioMood[keyof typeof AudioMood]
@@ -26,6 +27,9 @@ export const AudioCueName = {
   DamageAmbusher: 'damage-ambusher',
   DamageWanderer: 'damage-wanderer',
   StageClear: 'stage-clear',
+  BonusTick: 'bonus-tick',
+  BonusFinalTick: 'bonus-final-tick',
+  BonusComplete: 'bonus-complete',
   LocalRecord: 'local-record',
   GameOver: 'game-over',
   UiMove: 'ui-move',

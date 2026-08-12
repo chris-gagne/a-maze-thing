@@ -63,6 +63,8 @@ export interface WandererState {
 }
 
 export interface LifeTargetState {
+  id: number
+  effect: LifeTargetEffect
   cellIndex: number
   previousCellIndex: number | null
   targetCellIndex: number | null
@@ -71,6 +73,13 @@ export interface LifeTargetState {
   progress: number
   collected: boolean
 }
+
+export const LifeTargetEffect = {
+  ExtraLife: 'extra-life',
+  BonusMultiplier: 'bonus-multiplier',
+} as const
+
+export type LifeTargetEffect = typeof LifeTargetEffect[keyof typeof LifeTargetEffect]
 
 export interface StageSimulation {
   maze: Maze
@@ -82,6 +91,9 @@ export interface StageSimulation {
   wandererSpawns: number
   wandererTriggers: number
   lifeTarget: LifeTargetState | null
+  lifeTargets: LifeTargetState[]
+  nextLifeTargetId: number
+  bonusTargetsCaptured: number
   spikes: SpikeState[]
   shutters: ShutterState[]
   portals: Set<number>
@@ -97,6 +109,7 @@ export interface StageSimulation {
   lastDamageSource: DamageSourceValue | null
   complete: boolean
   gameOver: boolean
+  exitCompletesStage: boolean
 }
 
 export interface StageSimulationOptions {
@@ -117,10 +130,15 @@ export interface StageSimulationOptions {
   lifeTarget?: {
     startCellIndex: number
   }
+  lifeTargets?: Iterable<{
+    startCellIndex: number
+    effect?: LifeTargetEffect
+  }>
   spikes?: Iterable<SpikeState>
   shutters?: Iterable<ShutterState>
   portalIndices?: Iterable<number>
   lives?: number
+  exitCompletesStage?: boolean
 }
 
 interface DirectionDefinition {
@@ -162,6 +180,20 @@ export function createStageSimulation(
   portals.delete(entranceIndex)
   portals.delete(exitIndex)
   const lives = options.lives ?? INITIAL_LIVES
+  const lifeTargetOptions: Array<{ startCellIndex: number; effect?: LifeTargetEffect }> = options.lifeTargets === undefined
+    ? options.lifeTarget === undefined ? [] : [options.lifeTarget]
+    : [...options.lifeTargets]
+  const lifeTargets = lifeTargetOptions.map((target, id): LifeTargetState => ({
+    id,
+    effect: target.effect ?? LifeTargetEffect.ExtraLife,
+    cellIndex: target.startCellIndex,
+    previousCellIndex: null,
+    targetCellIndex: null,
+    explorationTargetCellIndex: null,
+    visitCounts: createInitialVisitCounts(maze.cells.length, target.startCellIndex),
+    progress: 0,
+    collected: false,
+  }))
 
   if (!Number.isInteger(lives) || lives < INITIAL_LIVES || lives > MAX_LIVES) {
     throw new RangeError(`Lives must be an integer from ${INITIAL_LIVES} to ${MAX_LIVES}.`)
@@ -217,17 +249,10 @@ export function createStageSimulation(
         },
     wandererSpawns: 0,
     wandererTriggers: 0,
-    lifeTarget: options.lifeTarget === undefined
-      ? null
-      : {
-          cellIndex: options.lifeTarget.startCellIndex,
-          previousCellIndex: null,
-          targetCellIndex: null,
-          explorationTargetCellIndex: null,
-          visitCounts: createInitialVisitCounts(maze.cells.length, options.lifeTarget.startCellIndex),
-          progress: 0,
-          collected: false,
-        },
+    lifeTarget: lifeTargets[0] ?? null,
+    lifeTargets,
+    nextLifeTargetId: lifeTargets.length,
+    bonusTargetsCaptured: 0,
     spikes: [...(options.spikes ?? [])],
     shutters: [...(options.shutters ?? [])],
     portals,
@@ -243,7 +268,29 @@ export function createStageSimulation(
     lastDamageSource: null,
     complete: false,
     gameOver: false,
+    exitCompletesStage: options.exitCompletesStage ?? true,
   }
+}
+
+export function spawnLifeTargets(
+  simulation: StageSimulation,
+  startCellIndices: Iterable<number>,
+  effect: LifeTargetEffect = LifeTargetEffect.ExtraLife,
+): LifeTargetState[] {
+  const spawned = [...startCellIndices].map((startCellIndex): LifeTargetState => ({
+    id: simulation.nextLifeTargetId++,
+    effect,
+    cellIndex: startCellIndex,
+    previousCellIndex: null,
+    targetCellIndex: null,
+    explorationTargetCellIndex: null,
+    visitCounts: createInitialVisitCounts(simulation.maze.cells.length, startCellIndex),
+    progress: 0,
+    collected: false,
+  }))
+  simulation.lifeTargets.push(...spawned)
+  simulation.lifeTarget ??= spawned[0] ?? null
+  return spawned
 }
 
 export function queuePlayerDirection(simulation: StageSimulation, direction: Direction): void {
@@ -295,7 +342,9 @@ export function updateStageSimulation(
   )) {
     return
   }
-  updateLifeTarget(simulation, deltaSeconds, movementSpeeds.lifeTarget ?? 0)
+  for (const lifeTarget of simulation.lifeTargets) {
+    updateLifeTarget(simulation, lifeTarget, deltaSeconds, movementSpeeds.lifeTarget ?? 0)
+  }
   collectLifeTargetIfCaught(simulation)
 
   if (simulation.hunter?.active && entitiesOverlap(simulation)) {
@@ -340,6 +389,16 @@ export function getLifeTargetGridPosition(simulation: StageSimulation): GridPoin
   }
 
   return getMovingEntityPosition(simulation.maze, lifeTarget)
+}
+
+export function getLifeTargetGridPositions(
+  simulation: StageSimulation,
+): ReadonlyMap<number, GridPoint> {
+  return new Map(simulation.lifeTargets.flatMap((lifeTarget) => {
+    return lifeTarget.collected
+      ? []
+      : [[lifeTarget.id, getMovingEntityPosition(simulation.maze, lifeTarget)] as const]
+  }))
 }
 
 function updatePlayer(
@@ -567,12 +626,11 @@ function updatePursuer(
 
 function updateLifeTarget(
   simulation: StageSimulation,
+  lifeTarget: LifeTargetState,
   deltaSeconds: number,
   speedInCellsPerSecond: number,
 ): void {
-  const lifeTarget = simulation.lifeTarget
-
-  if (lifeTarget === null || lifeTarget.collected || speedInCellsPerSecond <= 0) {
+  if (lifeTarget.collected || speedInCellsPerSecond <= 0) {
     return
   }
 
@@ -580,7 +638,7 @@ function updateLifeTarget(
 
   while (remainingDistance > ARRIVAL_EPSILON) {
     if (lifeTarget.targetCellIndex === null) {
-      lifeTarget.targetCellIndex = findNextCellAwayFromPlayer(simulation)
+      lifeTarget.targetCellIndex = findNextCellAwayFromPlayer(simulation, lifeTarget)
 
       if (lifeTarget.targetCellIndex === null) {
         return
@@ -735,7 +793,7 @@ function arriveAtTarget(simulation: StageSimulation): boolean {
   }
 
   const exitIndex = toIndex(simulation.maze.exit.x, simulation.maze.exit.y, simulation.maze.width)
-  simulation.complete = targetCellIndex === exitIndex
+  simulation.complete = simulation.exitCompletesStage && targetCellIndex === exitIndex
   return false
 }
 
@@ -853,13 +911,10 @@ function isPlayerOnActiveSpike(simulation: StageSimulation): boolean {
   })
 }
 
-function findNextCellAwayFromPlayer(simulation: StageSimulation): number | null {
-  const lifeTarget = simulation.lifeTarget
-
-  if (lifeTarget === null) {
-    return null
-  }
-
+function findNextCellAwayFromPlayer(
+  simulation: StageSimulation,
+  lifeTarget: LifeTargetState,
+): number | null {
   const playerTargetIndex = simulation.player.targetCellIndex ?? simulation.player.cellIndex
   const distances = getDistancesFrom(simulation.maze, playerTargetIndex)
 
@@ -894,7 +949,7 @@ function findNextCellAwayFromPlayer(simulation: StageSimulation): number | null 
     })
   }
 
-  lifeTarget.explorationTargetCellIndex = selectExplorationTarget(simulation, distances)
+  lifeTarget.explorationTargetCellIndex = selectExplorationTarget(simulation, lifeTarget, distances)
   return lifeTarget.explorationTargetCellIndex === null
     ? null
     : findNextCellTowardIndex(
@@ -906,14 +961,9 @@ function findNextCellAwayFromPlayer(simulation: StageSimulation): number | null 
 
 function selectExplorationTarget(
   simulation: StageSimulation,
+  lifeTarget: LifeTargetState,
   playerDistances: Int32Array,
 ): number | null {
-  const lifeTarget = simulation.lifeTarget
-
-  if (lifeTarget === null) {
-    return null
-  }
-
   let bestIndex: number | null = null
 
   for (let index = 0; index < simulation.maze.cells.length; index += 1) {
@@ -1012,18 +1062,18 @@ function getDistancesFrom(maze: Maze, startIndex: number): Int32Array {
 }
 
 function collectLifeTargetIfCaught(simulation: StageSimulation): void {
-  const lifeTargetPosition = getLifeTargetGridPosition(simulation)
-
-  if (lifeTargetPosition === null) {
-    return
-  }
-
   const playerPosition = getPlayerGridPosition(simulation)
-  if (Math.hypot(playerPosition.x - lifeTargetPosition.x, playerPosition.y - lifeTargetPosition.y) <= 0.32) {
-    simulation.lifeTarget!.collected = true
-    if (simulation.lives < MAX_LIVES) {
-      simulation.lives += 1
-      simulation.livesGained += 1
+  for (const lifeTarget of simulation.lifeTargets) {
+    if (lifeTarget.collected) continue
+    const targetPosition = getMovingEntityPosition(simulation.maze, lifeTarget)
+    if (Math.hypot(playerPosition.x - targetPosition.x, playerPosition.y - targetPosition.y) <= 0.32) {
+      lifeTarget.collected = true
+      if (lifeTarget.effect === LifeTargetEffect.BonusMultiplier) {
+        simulation.bonusTargetsCaptured += 1
+      } else if (simulation.lives < MAX_LIVES) {
+        simulation.lives += 1
+        simulation.livesGained += 1
+      }
     }
   }
 }
